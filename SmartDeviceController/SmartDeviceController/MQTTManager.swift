@@ -7,19 +7,29 @@
 import CocoaMQTT
 import SwiftUI
 
-class MQTTBroker {
+class MQTTBroker: ObservableObject {
+    static let shared = MQTTBroker()
     var mqtt: CocoaMQTT?
     var hiveMQ: HiveMQ
     
+    @Published var topics: Set<String> = Set()
+    var clientID: String
+    var hostAddress: String
+    var port: UInt16
+    
+    
     init() {
-        let clientID = "iOS_Client_\(UUID().uuidString)"
+        
+        clientID = "iOS_Client_\(UUID().uuidString)"
         hiveMQ = HiveMQ()
         
+        hostAddress = hiveMQ.host
+        port = hiveMQ.port
         // Initialize CocoaMQTT
-        mqtt = CocoaMQTT(clientID: clientID, host: hiveMQ.host, port: hiveMQ.port)
+        mqtt = CocoaMQTT(clientID: clientID, host: hostAddress, port: port)
         mqtt?.username = hiveMQ.username // Replace with your HiveMQ Cloud username
         mqtt?.password = hiveMQ.password // Replace with your HiveMQ Cloud password
-        mqtt?.logLevel = .debug
+        //mqtt?.logLevel = .debug
         
         mqtt?.enableSSL = true
         mqtt?.allowUntrustCACertificate = false
@@ -30,6 +40,7 @@ class MQTTBroker {
         
         mqtt?.delegate = self
         
+        topics.insert("Test/Topic")
     }
     
     func connect() {
@@ -40,35 +51,59 @@ class MQTTBroker {
         }
     }
     
+    func searchTopics() {
+            mqtt?.subscribe("#") // Subscribe to all topics
+        }
+    
     func disconnect() {
         mqtt?.disconnect()
     }
+    
+    func publish(topic: String, message: String) {
+        guard let mqtt = mqtt else {
+            print("MQTT not initialized")
+            return
+        }
+        mqtt.publish(topic, withString: message, qos: .qos1, retained: false)
+        print("Message sent to topic \(topic): \(message)")
+    }
+    
+    func subscribe(topic: String) {
+        guard let mqtt = mqtt else {
+            print("MQTT client is not initialized")
+            return
+        }
+        
+        mqtt.subscribe(topic, qos: .qos1)
+        print("Subscribed to topic: \(topic)")
+    }
+    
 }
 
 // Extend MQTTBroker to conform to CocoaMQTTDelegate
 extension MQTTBroker: CocoaMQTTDelegate {
     func mqtt(_ mqtt: CocoaMQTT, didPublishAck id: UInt16) {
-        print("")
+        print("Publish is Acknowleged")
     }
     
     func mqtt(_ mqtt: CocoaMQTT, didSubscribeTopics success: NSDictionary, failed: [String]) {
-        print("")
+        print("Subscribed to Topics")
     }
     
     func mqtt(_ mqtt: CocoaMQTT, didUnsubscribeTopics topics: [String]) {
-        print("")
+        print("Unsubscribed to Topics")
     }
     
     func mqttDidPing(_ mqtt: CocoaMQTT) {
-        print("")
+        print("Sent Ping")
     }
     
     func mqttDidReceivePong(_ mqtt: CocoaMQTT) {
-        print("")
+        print("Recieved Pong")
     }
     
     func mqttDidDisconnect(_ mqtt: CocoaMQTT, withError err: (any Error)?) {
-        print("")
+        print("Did Disconnect")
     }
     
     func mqtt(_ mqtt: CocoaMQTT, didConnectAck ack: CocoaMQTTConnAck) {
@@ -88,6 +123,7 @@ extension MQTTBroker: CocoaMQTTDelegate {
     }
 
     func mqtt(_ mqtt: CocoaMQTT, didReceiveMessage message: CocoaMQTTMessage, id: UInt16) {
+        topics.insert(message.topic)
         print("Received message: \(message.string ?? "") on topic: \(message.topic)")
     }
 

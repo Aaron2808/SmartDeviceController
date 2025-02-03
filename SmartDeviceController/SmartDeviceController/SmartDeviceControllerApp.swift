@@ -9,9 +9,14 @@ import SwiftUI
 
 @main
 struct SmartDeviceControllerApp: App {
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
+    @StateObject private var mqttManager = MQTTBroker.shared
+        
+        var body: some Scene {
+            WindowGroup {
+                DeviceGridView()
+                    .onAppear {
+                        mqttManager.connect()
+                    }
+            }
         }
-    }
 }
