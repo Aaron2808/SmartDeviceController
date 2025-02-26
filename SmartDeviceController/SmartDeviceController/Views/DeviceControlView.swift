@@ -10,7 +10,9 @@ import SwiftUI
 struct Device: Identifiable {
     let id: Int
     let name: String
-    let type: String
+    let location: String
+    let color: Color
+    let image: String
 }
 
 struct DeviceControlView: View {
@@ -122,5 +124,5 @@ struct DeviceControlView: View {
 }
 
 #Preview{
-    DeviceControlView(device: Device(id: 1, name: "Smart Light", type: "Light"))
+    DeviceControlView(device: Device(id: 1, name: "Smart Light", location: "Light", color: .red, image: "trash"))
 }

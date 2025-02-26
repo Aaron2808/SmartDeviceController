@@ -17,6 +17,7 @@ class MQTTBroker: ObservableObject {
     var hostAddress: String
     var port: UInt16
     
+    @Published var groupedTopics: [String: [String: String]] = [:]
     
     init() {
         
@@ -31,8 +32,8 @@ class MQTTBroker: ObservableObject {
         mqtt?.password = hiveMQ.password // Replace with your HiveMQ Cloud password
         //mqtt?.logLevel = .debug
         
-        mqtt?.enableSSL = true
-        mqtt?.allowUntrustCACertificate = false
+        //mqtt?.enableSSL = true
+        //mqtt?.allowUntrustCACertificate = true
         
         mqtt?.willMessage = CocoaMQTTMessage(topic: "/will", string: "dieout")
         mqtt?.cleanSession = true
@@ -123,8 +124,23 @@ extension MQTTBroker: CocoaMQTTDelegate {
     }
 
     func mqtt(_ mqtt: CocoaMQTT, didReceiveMessage message: CocoaMQTTMessage, id: UInt16) {
-        topics.insert(message.topic)
-        print("Received message: \(message.string ?? "") on topic: \(message.topic)")
+        let topic = message.topic
+        let payload = message.string ?? "N/A"
+        
+        let components = topic.split(separator: "/")
+        guard components.count >= 2 else { return }
+        
+        let deviceID = String(components[0])
+        let attribute = components.dropFirst().joined(separator: "/")
+        
+        DispatchQueue.main.async {
+            if self.groupedTopics[deviceID] == nil {
+                self.groupedTopics[deviceID] = [:]
+            }
+            self.groupedTopics[deviceID]?[attribute] = payload
+        }
+        
+        print("Grouped Topics Updated: \(self.groupedTopics)")
     }
 
     func mqtt(_ mqtt: CocoaMQTT, didPublishMessage message: CocoaMQTTMessage, id: UInt16) {

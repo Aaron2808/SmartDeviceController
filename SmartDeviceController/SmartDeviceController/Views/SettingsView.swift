@@ -1,159 +1,151 @@
-import UIKit
 import SwiftUI
-import SwiftUICore
 
 struct TopicDetails: Identifiable {
-    let id = UUID()  // Unique identifier for each instance
+    let id = UUID()
+    let topic: String
     let details: String
 }
 
 struct SettingsView: View {
-    
-    var connectionCallback: ((String) -> Void)?
-    
-    @State var temp: String = ""
-    @State var selectedTopicDetails: TopicDetails? = nil
-    @State var connectionStatus = "Not Connected"
-    @State var status: Bool = false
     @ObservedObject private var mqttBroker = MQTTBroker.shared
+    @State private var selectedTopicDetails: TopicDetails? = nil
+    @State private var connectionStatus = "Not Connected"
+    @State private var isConnected = false
     
     func updateConnectionStatus() {
-        connectionStatus = status ? "Connected" : "Not Connected"
+        connectionStatus = isConnected ? "Connected" : "Not Connected"
     }
     
     var body: some View {
         VStack {
-            Text("Settings").bold()
-            
             List {
-                HStack {
-                    Text("Connection Status:").bold()
-                    Spacer()
-                    Text(connectionStatus).foregroundColor(.gray)
-                }
-                
-                HStack {
-                    Text("Client ID ").bold()
-                    Spacer()
-                    Text(mqttBroker.clientID).foregroundColor(.gray)
-                }
-                
-                HStack {
-                    Text("Host Address").bold()
-                    Spacer()
-                    Text(mqttBroker.hostAddress).foregroundColor(.gray)
-                }
-                
-                HStack {
-                    Text("Port:").bold()
-                    Spacer()
-                    Text("\(mqttBroker.port)").foregroundColor(.gray)
-                }
-                
-                HStack {
-                    Button("Connect", action: {
-                        mqttBroker.connect()
-                        updateConnectionStatus()
-                    })
-                    .frame(width: 150, height: 40)
-                    .foregroundColor(.white)
-                    .background(.blue)
-                    .disabled(status)
-                    
-                    Spacer()
-                    
-                    Button("Disconnect", action: {
-                        mqttBroker.disconnect()
-                        updateConnectionStatus()
-                    })
-                    .frame(width: 150, height: 40)
-                    .foregroundColor(.white)
-                    .background(.blue)
-                    .disabled(!status)
-                }
+                connectionInfoSection
+                connectionButtons
             }
             
             VStack {
-                Text("Available Topics")
-                    .font(.title)
+                Text("Available Devices")
+                    .font(.title2)
                     .bold()
                 
-                List(Array(mqttBroker.topics.sorted()), id: \.self) { topic in
-                    HStack {
-                        Text(topic)
-                            .font(.body)
-                            .padding(.leading, 10)
-                        
-                        Spacer()
-                    }
-                    .padding()
-                    .background(Color.blue.opacity(0.1))
-                    .cornerRadius(10)
-                    .shadow(radius: 5)
-                    .onTapGesture {
-                        loadTopicDetails(for: topic)
+                List {
+                    ForEach(mqttBroker.groupedTopics.keys.sorted(), id: \.self) { deviceID in
+                        DisclosureGroup(deviceID) {
+                            ForEach(mqttBroker.groupedTopics[deviceID]!.keys.sorted(), id: \.self) { attribute in
+                                Button(action: {
+                                    loadTopicDetails(for: deviceID, attribute: attribute)
+                                }) {
+                                    HStack {
+                                        Text(attribute)
+                                        Spacer()
+                                        Text(mqttBroker.groupedTopics[deviceID]?[attribute] ?? "N/A")
+                                            .foregroundColor(.gray)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-                .listStyle(PlainListStyle())
                 
-                Button("Search") {
+                Button("Search for Topics") {
                     mqttBroker.searchTopics()
                 }
-            }
-            .sheet(item: $selectedTopicDetails) { details in
-                VStack {
-                    Text("Topic Details")
-                        .font(.title)
-                        .bold()
-                    
-                    ScrollView {
-                        Text(details.details)
-                            .padding()
-                            .font(.body)
-                            .multilineTextAlignment(.leading)
-                    }
-                    
-                    Button("Close") {
-                        selectedTopicDetails = nil
-                    }
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                }
                 .padding()
+                .background(Color.blue)
+                .foregroundColor(.white)
+                .cornerRadius(10)
             }
-            Spacer()
+        }
+        .sheet(item: $selectedTopicDetails) { details in
+            topicDetailsView(details: details)
         }
     }
     
-    private func loadTopicDetails(for topic: String) {
-        // Ensure decoding runs in the background to prevent blocking the UI
-        DispatchQueue.global(qos: .background).async {
-           // let message = $mqttBroker.recievedMessage(for: topic) ?? "No message available for this topic."
-            //let formattedMessage = formatMessage(message)
-            
-            DispatchQueue.main.async {
-                //selectedTopicDetails = TopicDetails(details: formattedMessage)
+    private var connectionInfoSection: some View {
+        Section {
+            HStack {
+                Text("Connection Status:").bold()
+                Spacer()
+                Text(connectionStatus).foregroundColor(isConnected ? .green : .red)
+            }
+            HStack {
+                Text("Client ID:").bold()
+                Spacer()
+                Text(mqttBroker.clientID).foregroundColor(.gray)
+            }
+            HStack {
+                Text("Host Address:").bold()
+                Spacer()
+                Text(mqttBroker.hostAddress).foregroundColor(.gray)
+            }
+            HStack {
+                Text("Port:").bold()
+                Spacer()
+                Text("\(mqttBroker.port)").foregroundColor(.gray)
             }
         }
+    }
+    
+    private var connectionButtons: some View {
+        HStack {
+            Button("Connect") {
+                mqttBroker.connect()
+                isConnected = true
+                updateConnectionStatus()
+            }
+            .frame(width: 150, height: 40)
+            .background(isConnected ? Color.gray : Color.blue)
+            .foregroundColor(.white)
+            .disabled(isConnected)
+            
+            Spacer()
+            
+            Button("Disconnect") {
+                mqttBroker.disconnect()
+                isConnected = false
+                updateConnectionStatus()
+            }
+            .frame(width: 150, height: 40)
+            .background(!isConnected ? Color.gray : Color.red)
+            .foregroundColor(.white)
+            .disabled(!isConnected)
+        }
+    }
+    
+    private func loadTopicDetails(for deviceID: String, attribute: String) {
+        if let rawMessage = mqttBroker.groupedTopics[deviceID]?[attribute] {
+            let formattedDetails = JSONParser.parseAnyJSON(rawMessage)
+            selectedTopicDetails = TopicDetails(topic: "\(deviceID)/\(attribute)", details: formattedDetails)
+        } else {
+            selectedTopicDetails = TopicDetails(topic: "\(deviceID)/\(attribute)", details: "No data available")
+        }
+    }
+    
+    private func topicDetailsView(details: TopicDetails) -> some View {
+        VStack {
+            Text("Topic Details")
+                .font(.title)
+                .bold()
+            
+            ScrollView {
+                Text(details.details)
+                    .padding()
+                    .font(.body)
+                    .multilineTextAlignment(.leading)
+            }
+            
+            Button("Close") {
+                selectedTopicDetails = nil
+            }
+            .padding()
+            .background(Color.blue)
+            .foregroundColor(.white)
+            .cornerRadius(10)
+        }
+        .padding()
     }
 }
 
 #Preview {
     SettingsView()
-}
-
-func formatMessage(_ message: String) -> String {
-    guard let data = message.data(using: .utf8) else { return "Invalid message" }
-    do {
-        // Decode JSON into a dictionary for pretty printing
-        if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
-            return json.map { "\($0.key): \($0.value)" }
-                .joined(separator: "\n")
-        }
-        return "Failed to parse JSON"
-    } catch {
-        return "Error decoding message: \(error.localizedDescription)"
-    }
 }

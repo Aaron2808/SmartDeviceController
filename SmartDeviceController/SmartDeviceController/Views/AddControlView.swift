@@ -35,7 +35,7 @@ struct AddControlView: View {
 
                 Section(header: Text("Default Message")) {
                     TextField("Enter default message", text: $message)
-                        .disabled(selectedControlType == .slider) // Slider sets value dynamically
+                        .disabled(selectedControlType == .slider)
                 }
             }
             .navigationBarTitle("Add Control", displayMode: .inline)
@@ -64,5 +64,6 @@ enum ControlType: String, Codable, CaseIterable {
     case slider = "Slider"
     case toggle = "Toggle"
 }
+
 
 

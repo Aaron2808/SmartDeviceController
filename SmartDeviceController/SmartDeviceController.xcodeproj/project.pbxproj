@@ -33,6 +33,7 @@
 		37AFA9232D35734700F8D1C2 /* SmartDeviceControllerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SmartDeviceControllerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		37AFA92D2D35734700F8D1C2 /* SmartDeviceControllerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SmartDeviceControllerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		37AFA9902D3E511D00F8D1C2 /* .gitignore */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitignore; sourceTree = "<group>"; };
+		37AFA9C02D529A3000F8D1C2 /* ca.crt */ = {isa = PBXFileReference; lastKnownFileType = text; path = ca.crt; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -82,6 +83,7 @@
 		37AFA90A2D35734500F8D1C2 = {
 			isa = PBXGroup;
 			children = (
+				37AFA9BF2D529A1E00F8D1C2 /* Certificates */,
 				37AFA98F2D3E50E200F8D1C2 /* Git */,
 				37AFA9152D35734500F8D1C2 /* SmartDeviceController */,
 				37AFA9262D35734700F8D1C2 /* Tests */,
@@ -106,6 +108,14 @@
 				37AFA9902D3E511D00F8D1C2 /* .gitignore */,
 			);
 			path = Git;
+			sourceTree = "<group>";
+		};
+		37AFA9BF2D529A1E00F8D1C2 /* Certificates */ = {
+			isa = PBXGroup;
+			children = (
+				37AFA9C02D529A3000F8D1C2 /* ca.crt */,
+			);
+			path = Certificates;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -417,6 +427,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"SmartDeviceController/Preview Content\"";
+				DEVELOPMENT_TEAM = 6U977QFCQ2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -445,6 +456,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"SmartDeviceController/Preview Content\"";
+				DEVELOPMENT_TEAM = 6U977QFCQ2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

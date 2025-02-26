@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct ContentView: View {
+struct TestView: View {
     
     @State var device: String = ""
     @State var settingView: Bool = false
@@ -111,5 +111,5 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView()
+    TestView()
 }
