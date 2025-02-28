@@ -12,7 +12,6 @@ struct DeviceCard: View {
     
     var body: some View {
         VStack(spacing:0) {
-            
             Rectangle()
                 .fill()
                 .foregroundStyle(device.color)
@@ -50,6 +49,7 @@ struct DeviceCard: View {
 struct DeviceGridView: View {
     @State private var settingView: Bool = false
     @State private var showAddDeviceForm = false
+    @State private var showMQTTDevices = false
     
     @State private var devices: [Device] = [
         Device(id: 1, name: "Smart Light", location: "Kitchen", color: .blue, image: "lightbulb"),
@@ -79,10 +79,10 @@ struct DeviceGridView: View {
                         .foregroundColor(.black).opacity(0.5)
                         .padding(30)
                 }
-                .navigationDestination(isPresented: $settingView) {
-                    SettingsView()
-                        .navigationTitle("Settings")
-                }
+                //.navigationDestination(isPresented: $settingView) {
+                    //SettingsView()
+                    //    .navigationTitle("Settings")
+                //}
                 
                 Spacer()
                 
