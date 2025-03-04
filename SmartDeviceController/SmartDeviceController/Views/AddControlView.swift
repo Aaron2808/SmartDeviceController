@@ -1,10 +1,15 @@
 import SwiftUI
 
 // Main view for adding controls
+import SwiftUI
+
+// Main view for adding controls
 struct AddControlView: View {
     @Binding var controls: [DeviceControl]
     let deviceId: Int
     let saveControls: () -> Void
+    
+    // Fix: Use a consistent reference to the shared MQTT broker
     @ObservedObject private var mqttBroker = MQTTBroker.shared
     @Environment(\.presentationMode) var presentationMode
     
@@ -12,6 +17,11 @@ struct AddControlView: View {
     @State private var selectedModule: ControlModule?
     @State private var selectedTopic: String = ""
     @State private var message: String = ""
+    @State private var minValue: Double = 0
+    @State private var maxValue: Double = 100
+    @State private var displayName: String = ""
+    @State private var selectedDataPoint: MQTTBroker.DataPoint? = nil
+    @State private var useDataPoint: Bool = false
     @State private var showingConfigSheet = false
     
     var body: some View {
@@ -34,6 +44,10 @@ struct AddControlView: View {
                             ModuleCard(module: module, isSelected: selectedModule?.name == module.name)
                                 .onTapGesture {
                                     selectedModule = module
+                                    // Initialize values
+                                    displayName = module.name
+                                    // Auto-enable data point selection for display modules
+                                    useDataPoint = (module.type == .temperatureDisplay || module.type == .dataDisplay)
                                     showingConfigSheet = true
                                 }
                         }
@@ -54,6 +68,11 @@ struct AddControlView: View {
                         topics: mqttBroker.topics.sorted(),
                         selectedTopic: $selectedTopic,
                         message: $message,
+                        minValue: $minValue,
+                        maxValue: $maxValue,
+                        displayName: $displayName,
+                        selectedDataPoint: $selectedDataPoint,
+                        useDataPoint: $useDataPoint,
                         onSave: {
                             addControl(module: module)
                             showingConfigSheet = false
@@ -68,16 +87,49 @@ struct AddControlView: View {
     }
     
     private func addControl(module: ControlModule) {
+        // Print debug info
+        print("Adding control with dataPointId: \(selectedDataPoint?.id ?? "nil")")
+        print("Selected topic: \(selectedTopic)")
+        print("Using data point: \(useDataPoint)")
+        
+        // Fix: Ensure we have a valid topic, either from direct selection or from a data point
+        let topicToUse: String
+        if useDataPoint, let dataPoint = selectedDataPoint {
+            topicToUse = dataPoint.path
+        } else {
+            topicToUse = selectedTopic
+        }
+        
+        // Create the new control with the data point ID if one was selected
         let newControl = DeviceControl(
             id: UUID().hashValue,
-            topic: selectedTopic,
+            topic: topicToUse,
             message: message,
             controlType: module.type,
-            displayName: module.name
+            displayName: displayName.isEmpty ? module.name : displayName,
+            minValue: minValue,
+            maxValue: maxValue,
+            dataPointId: useDataPoint ? selectedDataPoint?.id : nil  // Only use data point ID if useDataPoint is true
         )
+        
+        // Add to controls array and save
         controls.append(newControl)
         saveControls()
         presentationMode.wrappedValue.dismiss()
+        
+        // Reset selection states
+        resetSelectionStates()
+    }
+    
+    private func resetSelectionStates() {
+        selectedModule = nil
+        selectedTopic = ""
+        message = ""
+        minValue = 0
+        maxValue = 100
+        displayName = ""
+        selectedDataPoint = nil
+        useDataPoint = false
     }
 }
 
@@ -118,30 +170,59 @@ struct ModuleCard: View {
     }
 }
 
+
+// Configuration sheet for the selected module
+// Configuration sheet for the selected module
 // Configuration sheet for the selected module
 struct ModuleConfigSheet: View {
     let moduleType: ControlType
     let topics: [String]
     @Binding var selectedTopic: String
     @Binding var message: String
+    @Binding var minValue: Double
+    @Binding var maxValue: Double
+    @Binding var displayName: String
+    @Binding var selectedDataPoint: MQTTBroker.DataPoint?
+    @Binding var useDataPoint: Bool
     let onSave: () -> Void
     let onCancel: () -> Void
     
-    @State private var displayName: String = ""
-    @State private var minValue: Double = 0
-    @State private var maxValue: Double = 100
+    @State private var showDataPointSelector = false
+    
+    // Fix: Use a consistent reference to the shared MQTT broker
+    @ObservedObject private var mqttBroker = MQTTBroker.shared
     
     var body: some View {
         NavigationView {
             Form {
                 Section(header: Text("Basic Configuration")) {
-                    Picker("MQTT Topic", selection: $selectedTopic) {
-                        ForEach(topics, id: \.self) { topic in
-                            Text(topic).tag(topic)
+                    TextField("Display Name", text: $displayName)
+                    
+                    // Option to use a data point instead of a raw topic
+                    if moduleType == .temperatureDisplay || moduleType == .dataDisplay {
+                        // For display modules, always use data points
+                        // We'll handle this in onAppear instead of direct assignment
+                        dataPointSelectionButton
+                    } else {
+                        // For control modules, give the choice
+                        Toggle("Use Data Point", isOn: $useDataPoint)
+                            .onChange(of: useDataPoint) { newValue in
+                                if !newValue {
+                                    selectedDataPoint = nil
+                                }
+                            }
+                        
+                        if useDataPoint {
+                            dataPointSelectionButton
+                        } else {
+                            Picker("MQTT Topic", selection: $selectedTopic) {
+                                Text("Select a Topic").tag("")
+                                ForEach(topics, id: \.self) { topic in
+                                    Text(topic).tag(topic)
+                                }
+                            }
                         }
                     }
-                    
-                    TextField("Display Name", text: $displayName)
                 }
                 
                 Section(header: Text("Control Settings")) {
@@ -150,7 +231,6 @@ struct ModuleConfigSheet: View {
                         TextField("Button Message", text: $message)
                     case .toggle:
                         TextField("ON Message", text: $message)
-                        // You could add another field for OFF message
                     case .slider:
                         HStack {
                             Text("Min:")
@@ -161,17 +241,102 @@ struct ModuleConfigSheet: View {
                             TextField("Max Value", value: $maxValue, formatter: NumberFormatter())
                         }
                     case .temperatureDisplay, .dataDisplay:
-                        EmptyView() // These are display-only modules
+                        if selectedDataPoint == nil {
+                            Text("Please select a data point to display")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                
+                // Preview of selected data point value, if any
+                if let dataPoint = selectedDataPoint {
+                    Section(header: Text("Data Point Preview")) {
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(dataPoint.name)
+                                    .font(.headline)
+                                Text(dataPoint.path)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                            
+                            Text(mqttBroker.getFormattedValue(for: dataPoint))
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
             }
             .navigationBarTitle("Configure Module", displayMode: .inline)
             .navigationBarItems(
                 leading: Button("Cancel", action: onCancel),
-                trailing: Button("Save", action: onSave)
-                    .disabled(selectedTopic.isEmpty)
+                trailing: Button("Save") {
+                    saveModule()
+                }
+                .disabled(shouldDisableSaveButton)
             )
+            .sheet(isPresented: $showDataPointSelector) {
+                // Data point selector sheet
+                DataPointSelectorSheet(
+                    mqttBroker: mqttBroker,
+                    selectedDataPoint: $selectedDataPoint
+                )
+            }
+            .onAppear {
+                // Set useDataPoint to true for display modules
+                if moduleType == .temperatureDisplay || moduleType == .dataDisplay {
+                    useDataPoint = true
+                }
+            }
         }
+    }
+    
+    // Determine if Save button should be disabled
+    private var shouldDisableSaveButton: Bool {
+        if moduleType == .temperatureDisplay || moduleType == .dataDisplay {
+            // For display modules, require a data point
+            return selectedDataPoint == nil
+        } else if useDataPoint {
+            // If using a data point, require a selected data point
+            return selectedDataPoint == nil
+        } else {
+            // If using a topic directly, require a selected topic
+            return selectedTopic.isEmpty
+        }
+    }
+    
+    // Button to select a data point
+    private var dataPointSelectionButton: some View {
+        Button(action: {
+            showDataPointSelector = true
+        }) {
+            HStack {
+                if let dataPoint = selectedDataPoint {
+                    Text(dataPoint.name)
+                        .foregroundColor(.primary)
+                } else {
+                    Text("Select Data Point")
+                        .foregroundColor(.blue)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+    
+    // Save the configured module
+    private func saveModule() {
+        // Fix: If we're using a data point, get the topic from the data point path directly
+        if useDataPoint, let dataPoint = selectedDataPoint {
+            selectedTopic = dataPoint.path
+        }
+        
+        onSave()
     }
 }
 
@@ -241,5 +406,6 @@ struct DeviceControl: Codable, Identifiable {
     var displayName: String = ""
     var minValue: Double = 0
     var maxValue: Double = 100
+    var dataPointId: String? = nil  // Add this line
 }
 

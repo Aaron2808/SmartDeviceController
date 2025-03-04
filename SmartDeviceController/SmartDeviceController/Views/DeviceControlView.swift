@@ -19,6 +19,8 @@ struct DeviceControlView: View {
     let device: Device
     @State private var controls: [DeviceControl] = []
     @State private var isAddingControl = false
+    
+    // Use ObservedObject to ensure view refreshes when MQTT data changes
     @ObservedObject var mqttBroker = MQTTBroker.shared
     
     // Add grid layout for better control display
@@ -93,6 +95,8 @@ struct DeviceControlView: View {
                     }
                     .padding()
                 }
+                // This id modifier forces the entire grid to refresh when MQTT data changes
+                .id("control_grid_\(mqttBroker.dataUpdateIdentifier)")
             }
             
             // Add control button
@@ -139,15 +143,21 @@ struct DeviceControlView: View {
         }
     }
 }
+// This is the fixed implementation of the ControlModuleView struct
+// from DeviceControlView.swift focusing on the data point handling issue
 
-// Individual control module view
+import SwiftUI
+
 struct ControlModuleView: View {
     let control: DeviceControl
     let onAction: (String) -> Void
     
     @State private var sliderValue: Double = 0
     @State private var isToggleOn: Bool = false
-    @State private var dataValue: String = "--"
+    @State private var displayValue: String = "--"
+    @State private var timer: Timer? = nil
+    
+    @ObservedObject private var mqttBroker = MQTTBroker.shared
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -185,16 +195,118 @@ struct ControlModuleView: View {
             } else if control.controlType == .toggle {
                 isToggleOn = control.message.lowercased() == "on"
             } else if control.controlType == .temperatureDisplay || control.controlType == .dataDisplay {
+                print("\nInitializing control: \(control.displayName)")
+                print("  Topic: \(control.topic)")
+                print("  DataPointId: \(control.dataPointId ?? "nil")")
                 
-                Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
-                    if control.controlType == .temperatureDisplay {
-                        dataValue = "\(Int.random(in: 18...28))°C"
-                    } else {
-                        dataValue = "\(Int.random(in: 30...95))%"
+                // Print the paths we'll try
+                if let dataPointId = control.dataPointId {
+                    print("Will try path: \(dataPointId)")
+                }
+                
+                // Initial update
+                updateDisplayValue()
+                
+                // Debug the available data
+                mqttBroker.debugAllTopicData()
+                
+                // Set up a timer to check for updates
+                timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                    updateDisplayValue()
+                }
+                
+                if let timer = timer {
+                    RunLoop.current.add(timer, forMode: .common)
+                }
+            }
+        }
+        .onDisappear {
+            // Clean up timer when view disappears
+            timer?.invalidate()
+            timer = nil
+        }
+    }
+    
+    // Update the display value - now works with nested JSON directly
+    private func updateDisplayValue() {
+        var updatedValue: String? = nil
+        
+        // Try to get the value from the dataPointId path (always preferred)
+        if let dataPointId = control.dataPointId, !dataPointId.isEmpty {
+            // Use the new helper method for direct access to nested data
+            if let value = mqttBroker.getDataByPath(dataPointId) {
+                updatedValue = formatValue(value)
+            }
+        }
+        
+        // If no value was found via dataPointId, try the control's topic
+        if updatedValue == nil && !control.topic.isEmpty {
+            // Try the control topic directly
+            if let value = mqttBroker.getValue(topic: control.topic) {
+                updatedValue = formatValue(value)
+            } else {
+                // For topics like "shellyplug1/status/switch:0" that contain JSON
+                // Try to access the right property based on naming conventions
+                let topicParts = control.topic.split(separator: "/")
+                let displayNameLower = control.displayName.lowercased()
+                
+                if topicParts.count >= 2 {
+                    let possibleJsonTopic = control.topic
+                    if let jsonValue = mqttBroker.getValue(topic: possibleJsonTopic),
+                       case .jsonObject(let dict) = jsonValue {
+                        
+                        // Look for keys that might match the display name
+                        for (key, value) in dict {
+                            if key.lowercased() == displayNameLower {
+                                // Found a match by name
+                                if let numValue = value as? Double {
+                                    updatedValue = formatTemperatureOrValue(.number(numValue))
+                                } else if let intValue = value as? Int {
+                                    updatedValue = formatTemperatureOrValue(.number(Double(intValue)))
+                                } else if let boolValue = value as? Bool {
+                                    updatedValue = formatTemperatureOrValue(.boolean(boolValue))
+                                } else if let strValue = value as? String {
+                                    updatedValue = formatTemperatureOrValue(.text(strValue))
+                                }
+                            }
+                        }
+                        
+                        // Also try nested structures like "temperature/tC"
+                        if updatedValue == nil && displayNameLower == "temperature" {
+                            if let tempObj = dict["temperature"] as? [String: Any],
+                               let tempC = tempObj["tC"] as? Double {
+                                updatedValue = formatTemperatureOrValue(.number(tempC))
+                            }
+                        } else if updatedValue == nil && displayNameLower == "power" {
+                            if let power = dict["apower"] as? Double {
+                                updatedValue = formatTemperatureOrValue(.number(power))
+                            }
+                        }
                     }
                 }
             }
         }
+        
+        // Update the display if we found a value
+        if let newValue = updatedValue {
+            if newValue != displayValue {
+                displayValue = newValue
+            }
+        }
+    }
+    
+    // Format a value based on the control type
+    private func formatValue(_ value: MQTTBroker.DataValue) -> String {
+        return formatTemperatureOrValue(value)
+    }
+    
+    private func formatTemperatureOrValue(_ value: MQTTBroker.DataValue) -> String {
+        if control.controlType == .temperatureDisplay {
+            if let numValue = value.asDouble() {
+                return String(format: "%.1f°C", numValue)
+            }
+        }
+        return value.formattedString()
     }
     
     @ViewBuilder
@@ -235,7 +347,7 @@ struct ControlModuleView: View {
                 get: { isToggleOn },
                 set: { newValue in
                     isToggleOn = newValue
-                    onAction(newValue ? "ON" : "OFF")
+                    onAction(newValue ? "on" : "off")
                 }
             ))
             .labelsHidden()
@@ -243,7 +355,7 @@ struct ControlModuleView: View {
             
         case .temperatureDisplay:
             VStack {
-                Text(dataValue)
+                Text(displayValue)
                     .font(.system(size: 32, weight: .medium))
                     .foregroundColor(colorForControlType(.temperatureDisplay))
                 
@@ -255,11 +367,11 @@ struct ControlModuleView: View {
             
         case .dataDisplay:
             VStack {
-                Text(dataValue)
+                Text(displayValue)
                     .font(.system(size: 32, weight: .medium))
                     .foregroundColor(colorForControlType(.dataDisplay))
                 
-                Text("Humidity")
+                Text("Value")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -298,7 +410,6 @@ struct ControlModuleView: View {
         }
     }
 }
-
 #Preview {
     NavigationView {
         DeviceControlView(device: Device(id: 1, name: "Smart Light", location: "Living Room", color: .blue, image: "lightbulb.fill"))
