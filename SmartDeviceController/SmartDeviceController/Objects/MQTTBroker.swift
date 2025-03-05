@@ -10,7 +10,7 @@ import SwiftUI
 class MQTTBroker: ObservableObject {
     static let shared = MQTTBroker()
     var mqtt: CocoaMQTT?
-    var hiveMQ: HiveMQ
+    var mqttConfig: MQTTConfig
     
     @Published var topics: Set<String> = Set()
     var clientID: String
@@ -24,14 +24,14 @@ class MQTTBroker: ObservableObject {
     init() {
         
         clientID = "iOS_Client_\(UUID().uuidString)"
-        hiveMQ = HiveMQ()
+        mqttConfig = MQTTConfig()
         
-        hostAddress = hiveMQ.host
-        port = hiveMQ.port
-        // Initialize CocoaMQTT
+        hostAddress = mqttConfig.host
+        port = mqttConfig.port
+        
         mqtt = CocoaMQTT(clientID: clientID, host: hostAddress, port: port)
-        mqtt?.username = hiveMQ.username // Replace with your HiveMQ Cloud username
-        mqtt?.password = hiveMQ.password // Replace with your HiveMQ Cloud password
+        mqtt?.username = mqttConfig.username
+        mqtt?.password = mqttConfig.password
         //mqtt?.logLevel = .debug
         
         //mqtt?.enableSSL = true
@@ -50,12 +50,15 @@ class MQTTBroker: ObservableObject {
         if mqtt?.connState == .connected {
             print("Already connected, skipping connection attempt.")
         } else {
-            mqtt?.connect()
+            let connectResult = mqtt?.connect() ?? false
+            if !connectResult {
+                print("Warning: Connection attempt failed")
+            }
         }
     }
     
     func searchTopics() {
-        mqtt?.subscribe("#") // Subscribe to all topics
+        mqtt?.subscribe("#")
     }
     
     func disconnect() {
@@ -80,13 +83,10 @@ class MQTTBroker: ObservableObject {
         mqtt.subscribe(topic, qos: .qos1)
         print("Subscribed to topic: \(topic)")
     }
-    
-    // Fix 2: Fix the autoConnect method by adding missing closing brace and moving
-    // setupPeriodicTopicRefresh outside of it
+
     func autoConnect() {
         print("Starting MQTT auto-connection process")
         
-        // Check if already connected
         if mqtt?.connState == .connected {
             print("Already connected to MQTT broker")
             searchTopics()
@@ -94,18 +94,15 @@ class MQTTBroker: ObservableObject {
             return
         }
         
-        // Force disconnection if in invalid state
         if mqtt?.connState != .disconnected {
             print("MQTT in unexpected state: \(String(describing: mqtt?.connState)). Forcing disconnect.")
             disconnect()
         }
         
-        // Delay slightly to ensure clean state
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             print("Initiating connection to MQTT broker")
             self.connect()
             
-            // Check connection status after a short delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 if self.mqtt?.connState == .connected {
                     print("Successfully connected to MQTT broker")
@@ -114,10 +111,8 @@ class MQTTBroker: ObservableObject {
                 } else {
                     print("Failed to connect on first attempt, retrying...")
                     
-                    // Try once more
                     self.connect()
                     
-                    // Final check and topic search
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                         if self.mqtt?.connState == .connected {
                             print("Successfully connected on second attempt")
@@ -132,12 +127,11 @@ class MQTTBroker: ObservableObject {
         }
     }
     
-    // Fix 2: Moved this function outside of autoConnect
     private func setupPeriodicTopicRefresh() {
-        // Cancel any existing timers
+       
         NotificationCenter.default.post(name: NSNotification.Name("CancelExistingMQTTTimers"), object: nil)
         
-        // Create a timer that fires every 30 seconds to refresh topics
+        
         let timer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [self] _ in
             if self.mqtt?.connState == .connected {
                 print("Performing periodic topic refresh")
@@ -148,17 +142,14 @@ class MQTTBroker: ObservableObject {
             }
         }
         
-        // Store timer reference
         RunLoop.current.add(timer, forMode: .common)
     }
     
-    // Check if currently connected
     var isConnected: Bool {
         return mqtt?.connState == .connected
     }
 }
 
-// Extend MQTTBroker to conform to CocoaMQTTDelegate
 extension MQTTBroker: CocoaMQTTDelegate {
     func mqtt(_ mqtt: CocoaMQTT, didPublishAck id: UInt16) {
         print("Publish is Acknowleged")
@@ -194,7 +185,7 @@ extension MQTTBroker: CocoaMQTTDelegate {
 
     func mqtt(_ mqtt: CocoaMQTT, didDisconnectWithError error: Error?) {
         if let error = error {
-            print("Disconnected from HiveMQ Cloud. Error: \(error.localizedDescription)")
+            print("Disconnected from Server. Error: \(error.localizedDescription)")
         } else {
             print("Disconnected successfully.")
         }
@@ -206,28 +197,21 @@ extension MQTTBroker: CocoaMQTTDelegate {
             
             print("MQTT Received: Topic: \(topic), Payload: \(payload)")
             
-            // Using the main thread for all UI updates is critical
             DispatchQueue.main.async {
-                // Update the existing groupedTopics for backwards compatibility
+               
                 let components = topic.split(separator: "/")
                 guard components.count >= 1 else { return }
                 
                 let deviceID = String(components[0])
                 let attribute = components.dropFirst().joined(separator: "/")
                 
-                // Update old data structure
                 if self.groupedTopics[deviceID] == nil {
                     self.groupedTopics[deviceID] = [:]
                 }
                 self.groupedTopics[deviceID]?[attribute] = payload
-                
-                // Process with new generic system
                 self.processGenericMessage(topic: topic, payload: payload)
-                
-                // Add to topics list for selection
                 self.topics.insert(topic)
                 
-                // Force a UI update - this is critical
                 self.objectWillChange.send()
             }
         }
@@ -241,7 +225,7 @@ extension MQTTBroker: CocoaMQTTDelegate {
 
 
 extension MQTTBroker {
-    // A generic structure to hold any type of value
+    
     enum DataValue: Equatable {
         case number(Double)
         case boolean(Bool)
@@ -250,7 +234,6 @@ extension MQTTBroker {
         case jsonArray([Any])
         case unknown
         
-        // Get formatted string representation of the value
         func formattedString() -> String {
             switch self {
             case .number(let value):
@@ -272,7 +255,6 @@ extension MQTTBroker {
             }
         }
         
-        // Check if the value is empty/zero
         var isEmpty: Bool {
             switch self {
             case .number(let value): return value == 0
@@ -284,7 +266,6 @@ extension MQTTBroker {
             }
         }
         
-        // Attempt to convert to a specific type
         func asDouble() -> Double? {
             switch self {
             case .number(let value): return value
@@ -321,7 +302,6 @@ extension MQTTBroker {
             case (.number(let l), .number(let r)): return l == r
             case (.boolean(let l), .boolean(let r)): return l == r
             case (.text(let l), .text(let r)): return l == r
-            // Note: Can't really compare dictionary and array equality easily
             case (.jsonObject, .jsonObject), (.jsonArray, .jsonArray): return false
             case (.unknown, .unknown): return true
             default: return false
@@ -329,14 +309,13 @@ extension MQTTBroker {
         }
     }
     
-    // Generic data point structure for various device data
     struct DataPoint: Identifiable, Hashable {
-        var id: String  // Unique identifier
-        var deviceId: String  // Device this data point belongs to
-        var name: String  // Display name
-        var path: String  // Full path to the data
-        var type: DataType // Type of the data
-        var unit: String?  // Optional unit of measurement
+        var id: String
+        var deviceId: String
+        var name: String
+        var path: String
+        var type: DataType
+        var unit: String?
         
         func hash(into hasher: inout Hasher) {
             hasher.combine(id)
@@ -347,7 +326,6 @@ extension MQTTBroker {
         }
     }
     
-    // Type of data for a data point
     enum DataType {
         case numeric
         case boolean
@@ -355,8 +333,7 @@ extension MQTTBroker {
         case object
         case array
         case unknown
-        
-        // Get icon name for SwiftUI
+       
         var iconName: String {
             switch self {
             case .numeric: return "number"
@@ -368,7 +345,6 @@ extension MQTTBroker {
             }
         }
         
-        // Get color for UI
         var color: Color {
             switch self {
             case .numeric: return .blue
@@ -381,10 +357,6 @@ extension MQTTBroker {
         }
     }
     
-    // Storage for all discovered topics and their values
-    
-    
-    // Structure for device context info
     struct DeviceContext {
         var deviceId: String
         var lastSeen: Date = Date()
@@ -393,7 +365,6 @@ extension MQTTBroker {
         var friendlyName: String?
         var isOnline: Bool = true
         
-        // Get a display name for the device
         var displayName: String {
             if let name = friendlyName, !name.isEmpty {
                 return name
@@ -402,17 +373,15 @@ extension MQTTBroker {
         }
     }
     var dataUpdateIdentifier: Int {
-            // Use a combination of data that changes when new messages arrive
+        
             var hasher = Hasher()
             hasher.combine(topicData.count)
-            
-            // Add some of the latest data values (up to 10) to the hash
+        
             let sampleKeys = Array(topicData.keys.prefix(10))
             for key in sampleKeys {
                 if let value = topicData[key] {
                     hasher.combine(key)
                     
-                    // Add value hash based on type
                     switch value {
                     case .number(let num):
                         hasher.combine(num)
@@ -421,7 +390,6 @@ extension MQTTBroker {
                     case .text(let text):
                         hasher.combine(text)
                     case .jsonObject, .jsonArray, .unknown:
-                        // For complex types, just include their existence
                         hasher.combine(1)
                     }
                 }
@@ -430,33 +398,27 @@ extension MQTTBroker {
             return hasher.finalize()
         }
         
-        // This enhances the processGenericMessage function to ensure
     func processGenericMessage(topic: String, payload: String) {
-        // Extract device ID from topic (first component)
         let topicComponents = topic.split(separator: "/")
         guard !topicComponents.isEmpty else { return }
         
         let deviceId = String(topicComponents[0])
         
-        // Update device context
         updateDeviceContext(deviceId: deviceId, topic: topic)
         
         print("Processing \(topic) with payload: \(payload.prefix(100))...")
         
-        // Store previous value for comparison
         let previousValue = topicData[topic]
         var valueChanged = false
         
-        // First try to parse as JSON
         if let jsonData = payload.data(using: .utf8),
            let jsonObject = try? JSONSerialization.jsonObject(with: jsonData) {
             
             if let dict = jsonObject as? [String: Any] {
-                // Store the entire JSON object
+               
                 topicData[topic] = .jsonObject(dict)
                 valueChanged = true
-                
-                // Process each top-level key directly and store as individual data points
+            
                 for (key, value) in dict {
                     let keyPath = "\(topic)/\(key)"
                     
@@ -476,24 +438,20 @@ extension MQTTBroker {
                         topicData[keyPath] = .jsonObject(objValue)
                         print("Stored nested object for \(keyPath)")
                         
-                        // Handle nested objects - specifically for common patterns like temperature
                         processNestedObject(objValue, parentPath: keyPath)
                     }
                 }
                 
-                // Also extract and flatten nested values for more complex path access
                 let flatValues = flattenJSON(dict, parentPath: topic)
                 for (path, value) in flatValues {
-                    if topicData[path] == nil {  // Only add if not already directly processed
+                    if topicData[path] == nil {
                         topicData[path] = value
                     }
                 }
             } else if let array = jsonObject as? [Any] {
-                // Store JSON array
                 topicData[topic] = .jsonArray(array)
                 valueChanged = true
                 
-                // Store individual array elements
                 for (index, element) in array.enumerated() {
                     let elementPath = "\(topic)[\(index)]"
                     
@@ -512,19 +470,15 @@ extension MQTTBroker {
                 }
             }
         } else if let numberValue = Double(payload) {
-            // Store as numeric value
             topicData[topic] = .number(numberValue)
             valueChanged = previousValue != topicData[topic]
         } else if payload.lowercased() == "true" || payload.lowercased() == "false" {
-            // Store as boolean
             topicData[topic] = .boolean(payload.lowercased() == "true")
             valueChanged = previousValue != topicData[topic]
         } else {
-            // Store as text
             topicData[topic] = .text(payload)
             valueChanged = previousValue != topicData[topic]
             
-            // Special handling for online/offline status
             if topic.hasSuffix("/online") || topic.hasSuffix("/availability") {
                 let isOnline = (payload.lowercased() == "online" || payload.lowercased() == "true")
                 if var context = deviceContexts[deviceId] {
@@ -534,7 +488,6 @@ extension MQTTBroker {
             }
         }
         
-        // Notify of changes - critical for UI updates
         if valueChanged {
             DispatchQueue.main.async {
                 print("Sending objectWillChange notification due to data update")
@@ -565,7 +518,6 @@ extension MQTTBroker {
             } else if let nestedArray = value as? [Any] {
                 topicData[keyPath] = .jsonArray(nestedArray)
                 
-                // Store array elements
                 for (index, element) in nestedArray.enumerated() {
                     let elementPath = "\(keyPath)[\(index)]"
                     
@@ -582,7 +534,7 @@ extension MQTTBroker {
             }
         }
     }
-    // Update device context information
+   
     private func updateDeviceContext(deviceId: String, topic: String) {
         if deviceContexts[deviceId] == nil {
             deviceContexts[deviceId] = DeviceContext(deviceId: deviceId)
@@ -592,7 +544,6 @@ extension MQTTBroker {
         context.lastSeen = Date()
         context.knownTopics.insert(topic)
         
-        // Try to detect device type from topics
         if context.deviceType == nil {
             if topic.contains("/temperature") || topic.contains("/humidity") {
                 context.deviceType = "Sensor"
@@ -602,8 +553,7 @@ extension MQTTBroker {
                 context.deviceType = "Light"
             }
         }
-        
-        // Look for name in specific topics
+    
         if context.friendlyName == nil && topic.hasSuffix("/name") {
             if case .text(let name) = topicData[topic] {
                 context.friendlyName = name
@@ -613,14 +563,12 @@ extension MQTTBroker {
         deviceContexts[deviceId] = context
     }
     
-    // Flatten a nested JSON structure for easier value access
     private func flattenJSON(_ json: [String: Any], parentPath: String) -> [String: DataValue] {
             var result: [String: DataValue] = [:]
             
             for (key, value) in json {
                 let currentPath = "\(parentPath)/\(key)"
                 
-                // Store this value directly
                 if let numberValue = value as? Double {
                     result[currentPath] = .number(numberValue)
                 } else if let intValue = value as? Int {
@@ -631,19 +579,15 @@ extension MQTTBroker {
                     result[currentPath] = .text(stringValue)
                 }
                 
-                // Then handle nested structures
                 if let nestedDict = value as? [String: Any] {
-                    // Recursive case for nested objects
+
                     let nestedResult = flattenJSON(nestedDict, parentPath: currentPath)
                     result.merge(nestedResult) { current, _ in current }
                     
-                    // Also store the object itself
                     result[currentPath] = .jsonObject(nestedDict)
                 } else if let nestedArray = value as? [Any] {
-                    // Store array
                     result[currentPath] = .jsonArray(nestedArray)
                     
-                    // Also index array elements if they're simple types
                     for (index, element) in nestedArray.enumerated() {
                         let elementPath = "\(currentPath)[\(index)]"
                         if let numberElement = element as? Double {
@@ -656,7 +600,6 @@ extension MQTTBroker {
                             result[elementPath] = .text(stringElement)
                         } else if let objElement = element as? [String: Any] {
                             result[elementPath] = .jsonObject(objElement)
-                            // Recursively process this object too
                             let nestedResult = flattenJSON(objElement, parentPath: elementPath)
                             result.merge(nestedResult) { current, _ in current }
                         }
@@ -682,31 +625,23 @@ extension MQTTBroker {
             print("=======================\n")
         }
         
-        // Add this utility method to get data directly by object path
         func getDataByPath(_ path: String) -> DataValue? {
-            // Direct lookup first
             if let value = topicData[path] {
-                print("Found direct match for path: \(path)")
+               
                 return value
             }
             
-            // Try to handle nested paths like "shellyplug1/status/switch:0/apower"
             let components = path.split(separator: "/")
             if components.count >= 3 {
-                // Get the main topic (first components except the last)
                 let baseTopic = components.dropLast().joined(separator: "/")
-                // Get the property name (last component)
                 let propertyName = String(components.last!)
                 
                 print("Looking for \(propertyName) in \(baseTopic)")
                 
-                // Try to find the base topic as a JSON object
                 if let baseValue = topicData[baseTopic], case .jsonObject(let dict) = baseValue {
-                    // Look for the property in the dictionary
                     if let propValue = dict[propertyName] {
                         print("Found \(propertyName) in JSON: \(propValue)")
                         
-                        // Convert to DataValue based on type
                         if let numValue = propValue as? Double {
                             return .number(numValue)
                         } else if let intValue = propValue as? Int {
@@ -722,7 +657,6 @@ extension MQTTBroker {
                         }
                     }
                     
-                    // If not found directly, try parsing nested paths like "aenergy/total"
                     if propertyName.contains("/") {
                         let nestedPath = propertyName.split(separator: "/")
                         var current: Any = dict
@@ -732,12 +666,11 @@ extension MQTTBroker {
                                let nextValue = currentDict[String(part)] {
                                 current = nextValue
                             } else {
-                                // Path not found
                                 return nil
                             }
                         }
                         
-                        // Convert final value to DataValue
+                       
                         if let numValue = current as? Double {
                             return .number(numValue)
                         } else if let intValue = current as? Int {
@@ -754,7 +687,6 @@ extension MQTTBroker {
             return nil
         }
     
-    // Get all available data points for a specific device
     func getAllDataPoints(deviceId: String? = nil) -> [DataPoint] {
         var results: [DataPoint] = []
         
@@ -764,13 +696,11 @@ extension MQTTBroker {
             
             let topicDeviceId = String(components[0])
             if let deviceId = deviceId, topicDeviceId != deviceId {
-                continue // Skip if filtering by device and it doesn't match
+                continue
             }
             
-            // Create name from the last path component
             let name = components.last.map { String($0) } ?? topic
             
-            // Determine data type and unit
             let (dataType, unit) = inferTypeAndUnit(topic: topic, value: value)
             
             let dataPoint = DataPoint(
@@ -788,7 +718,6 @@ extension MQTTBroker {
         return results
     }
     
-    // Infer data type and unit from topic and value
     private func inferTypeAndUnit(topic: String, value: DataValue) -> (DataType, String?) {
         let lowerTopic = topic.lowercased()
         var unit: String? = nil
@@ -798,7 +727,6 @@ extension MQTTBroker {
         case .number:
             dataType = .numeric
             
-            // Try to determine unit from topic name
             if lowerTopic.contains("temp") {
                 unit = "°C"
             } else if lowerTopic.contains("humid") {
@@ -832,7 +760,6 @@ extension MQTTBroker {
         return (dataType, unit)
     }
     
-    // Format a raw topic name into a display-friendly version
     private func formatName(_ raw: String) -> String {
         let components = raw.split(separator: "_").map { String($0) }
         let formattedComponents = components.map {
@@ -841,7 +768,6 @@ extension MQTTBroker {
         return formattedComponents.joined(separator: " ")
     }
     
-    // Get formatted value for a data point
     func getFormattedValue(for dataPoint: DataPoint) -> String {
         guard let value = topicData[dataPoint.path] else {
             return "N/A"
@@ -854,22 +780,18 @@ extension MQTTBroker {
         return formattedValue
     }
     
-    // Get raw value for a data point
     func getValue(for dataPoint: DataPoint) -> DataValue? {
         return topicData[dataPoint.path]
     }
     
-    // Convenience method to get value by topic
     func getValue(topic: String) -> DataValue? {
         return topicData[topic]
     }
     
-    // Get all devices with data
     func getAllDevices() -> [String] {
         return Array(deviceContexts.keys).sorted()
     }
     
-    // Search for data points matching a query
     func searchDataPoints(query: String, deviceId: String? = nil) -> [DataPoint] {
         let allPoints = getAllDataPoints(deviceId: deviceId)
         
@@ -882,9 +804,20 @@ extension MQTTBroker {
             dataPoint.path.lowercased().contains(query.lowercased())
         }
     }
+    
+    func getDataPointById(_ dataPointId: String) -> DataPoint? {
+            return getAllDataPoints().first(where: { $0.id == dataPointId })
+        }
+        
+        func getAllDataPoints() -> [DataPoint] {
+            var allPoints: [DataPoint] = []
+            for deviceId in getAllDevices() {
+                allPoints.append(contentsOf: getAllDataPoints(deviceId: deviceId))
+            }
+            return allPoints
+        }
 }
 
-// MARK: - Enhanced Data Point Selector View
 struct EnhancedDataPointSelector: View {
     @ObservedObject var mqttBroker: MQTTBroker
     @Binding var selectedDataPoint: MQTTBroker.DataPoint?
@@ -899,7 +832,6 @@ struct EnhancedDataPointSelector: View {
     var filteredDataPoints: [MQTTBroker.DataPoint] {
         var points = mqttBroker.searchDataPoints(query: searchText, deviceId: selectedDevice)
         
-        // Apply type filter if set
         if let type = filterType {
             points = points.filter { $0.type == type }
         }
@@ -909,9 +841,7 @@ struct EnhancedDataPointSelector: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Search and filter header
             VStack(spacing: 8) {
-                // Device selector
                 Picker("Device", selection: $selectedDevice) {
                     Text("All Devices").tag(Optional<String>(nil))
                     ForEach(devices, id: \.self) { device in
@@ -928,7 +858,6 @@ struct EnhancedDataPointSelector: View {
                 }
                 .pickerStyle(MenuPickerStyle())
                 
-                // Search field
                 HStack {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(.secondary)
@@ -949,7 +878,6 @@ struct EnhancedDataPointSelector: View {
                 .background(Color(.systemGray6))
                 .cornerRadius(8)
                 
-                // Type filter
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack {
                         TypeFilterButton(
@@ -991,13 +919,11 @@ struct EnhancedDataPointSelector: View {
             
             Divider()
             
-            // Results list
             if filteredDataPoints.isEmpty {
                 VStack(spacing: 16) {
                     Spacer()
                     
                     if searchText.isEmpty && filterType == nil {
-                        // No data yet
                         Image(systemName: "antenna.radiowaves.left.and.right")
                             .font(.system(size: 48))
                             .foregroundColor(.secondary)
@@ -1011,7 +937,6 @@ struct EnhancedDataPointSelector: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
                     } else {
-                        // No search results
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: 48))
                             .foregroundColor(.secondary)
@@ -1045,17 +970,15 @@ struct EnhancedDataPointSelector: View {
         }
     }
     
-    // Toggle the type filter
     private func toggleFilter(_ type: MQTTBroker.DataType) {
         if filterType == type {
-            filterType = nil  // Turn off filter if already selected
+            filterType = nil
         } else {
-            filterType = type // Turn on this filter
+            filterType = type
         }
     }
 }
 
-// Helper component for type filtering
 struct TypeFilterButton: View {
     let icon: String
     let label: String
@@ -1082,19 +1005,16 @@ struct TypeFilterButton: View {
     }
 }
 
-// Row for displaying a data point
 struct DataPointRow: View {
     let dataPoint: MQTTBroker.DataPoint
     let mqttBroker: MQTTBroker
     
     var body: some View {
         HStack {
-            // Icon for the type
             Image(systemName: dataPoint.type.iconName)
                 .foregroundColor(dataPoint.type.color)
                 .frame(width: 24, height: 24)
             
-            // Name and path
             VStack(alignment: .leading, spacing: 4) {
                 Text(dataPoint.name)
                     .font(.headline)
@@ -1107,7 +1027,6 @@ struct DataPointRow: View {
             
             Spacer()
             
-            // Current value
             Text(mqttBroker.getFormattedValue(for: dataPoint))
                 .font(.system(.body, design: .monospaced))
                 .foregroundColor(.secondary)
@@ -1116,7 +1035,6 @@ struct DataPointRow: View {
     }
 }
 
-// MARK: - Integration with Module Config
 struct GenericModuleConfigSheet: View {
     let moduleType: ControlType
     @Binding var selectedDataPoint: MQTTBroker.DataPoint?
@@ -1166,7 +1084,6 @@ struct GenericModuleConfigSheet: View {
                     }
                 }
                 
-                // Module-specific configuration
                 Section(header: Text("Control Settings")) {
                     switch moduleType {
                     case .button:
@@ -1182,15 +1099,13 @@ struct GenericModuleConfigSheet: View {
                             Text("Max:")
                             TextField("Max Value", value: $maxValue, formatter: NumberFormatter())
                         }
-                    case .temperatureDisplay, .dataDisplay:
-                        // No additional settings needed
+                    case .dataDisplay:
                         Text("This module will display values from the selected data point")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
                 
-                // Value preview
                 if let dataPoint = selectedDataPoint {
                     Section(header: Text("Current Value")) {
                         HStack {
@@ -1198,10 +1113,8 @@ struct GenericModuleConfigSheet: View {
                                 .font(.system(.body, design: .monospaced))
                             
                             Spacer()
-                            
-                            // Refresh button
+                    
                             Button(action: {
-                                // Force a UI refresh
                                 mqttBroker.objectWillChange.send()
                             }) {
                                 Image(systemName: "arrow.clockwise")

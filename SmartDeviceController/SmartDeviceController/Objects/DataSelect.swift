@@ -1,19 +1,16 @@
 import SwiftUI
 
-// Improved data point selector with hierarchical organization
-struct ImprovedDataPointSelector: View {
+struct DataSelect: View {
     @ObservedObject var mqttBroker: MQTTBroker
     @Binding var selectedDataPoint: MQTTBroker.DataPoint?
     @State private var searchText: String = ""
     @State private var expandedDevices: Set<String> = []
     @State private var expandedCategories: [String: Set<String>] = [:]
     
-    // Get all devices
     var devices: [String] {
         return mqttBroker.getAllDevices()
     }
     
-    // Group data points by type/category for each device
     func groupedDataPoints(for deviceId: String) -> [String: [MQTTBroker.DataPoint]] {
         let dataPoints = mqttBroker.getAllDataPoints(deviceId: deviceId)
         let filteredPoints = searchText.isEmpty
@@ -23,14 +20,11 @@ struct ImprovedDataPointSelector: View {
                 $0.path.lowercased().contains(searchText.lowercased())
               }
         
-        // Group data points by category
         var grouped: [String: [MQTTBroker.DataPoint]] = [:]
         
         for point in filteredPoints {
-            // Try to determine category from path or type
             var category = "Other"
             
-            // Check for common categories in the path
             let path = point.path.lowercased()
             if path.contains("temp") {
                 category = "Temperature"
@@ -47,7 +41,7 @@ struct ImprovedDataPointSelector: View {
             } else if path.contains("status") {
                 category = "Status"
             } else {
-                // Fallback to type-based categories
+                
                 switch point.type {
                 case .numeric: category = "Numeric Values"
                 case .boolean: category = "Boolean Values"
@@ -69,7 +63,6 @@ struct ImprovedDataPointSelector: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Search field
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
@@ -94,15 +87,14 @@ struct ImprovedDataPointSelector: View {
             
             // Data points list
             if devices.isEmpty {
-                emptyStateView
+                noDeviceView
             } else {
-                dataPointListView
+                dataView
             }
         }
     }
     
-    // View shown when no devices are found
-    private var emptyStateView: some View {
+    private var noDeviceView: some View {
         VStack(spacing: 20) {
             Spacer()
             
@@ -123,8 +115,7 @@ struct ImprovedDataPointSelector: View {
         }
     }
     
-    // Main list view for data points
-    private var dataPointListView: some View {
+    private var dataView: some View {
         List {
             ForEach(devices, id: \.self) { deviceId in
                 deviceSection(deviceId)
@@ -133,7 +124,6 @@ struct ImprovedDataPointSelector: View {
         .listStyle(InsetGroupedListStyle())
     }
     
-    // Section for each device
     private func deviceSection(_ deviceId: String) -> some View {
         let isExpanded = expandedDevices.contains(deviceId)
         let grouped = groupedDataPoints(for: deviceId)
@@ -149,7 +139,6 @@ struct ImprovedDataPointSelector: View {
         }
     }
     
-    // Header for each device with online status indicator
     private func deviceHeader(_ deviceId: String, isExpanded: Bool, hasDataPoints: Bool) -> some View {
         Button(action: {
             toggleDeviceExpansion(deviceId)
@@ -164,10 +153,8 @@ struct ImprovedDataPointSelector: View {
                 
                 Spacer()
                 
-                // Show device status and data point count
                 HStack(spacing: 4) {
                     if hasDataPoints {
-                        // Count total data points in each category
                         let totalPoints = groupedDataPoints(for: deviceId).values.reduce(0) { $0 + $1.count }
                         Text("\(totalPoints)")
                             .font(.caption)
@@ -191,8 +178,7 @@ struct ImprovedDataPointSelector: View {
         }
         .buttonStyle(PlainButtonStyle())
     }
-    
-    // Row for each category within a device
+
     private func categoryRow(deviceId: String, category: String, dataPoints: [MQTTBroker.DataPoint]) -> some View {
         let isExpanded = expandedCategories[deviceId]?.contains(category) ?? false
         
@@ -230,13 +216,11 @@ struct ImprovedDataPointSelector: View {
         }
     }
     
-    // Row for each individual data point
     private func dataPointRow(_ dataPoint: MQTTBroker.DataPoint) -> some View {
         Button(action: {
             selectedDataPoint = dataPoint
         }) {
             HStack {
-                // Icon for data type
                 Image(systemName: dataPoint.type.iconName)
                     .foregroundColor(dataPoint.type.color)
                     .frame(width: 24, height: 24)
@@ -253,7 +237,6 @@ struct ImprovedDataPointSelector: View {
                 
                 Spacer()
                 
-                // Current value
                 Text(mqttBroker.getFormattedValue(for: dataPoint))
                     .font(.callout)
                     .foregroundColor(.secondary)
@@ -266,8 +249,6 @@ struct ImprovedDataPointSelector: View {
         }
         .buttonStyle(PlainButtonStyle())
     }
-    
-    // Expand/collapse a device section
     private func toggleDeviceExpansion(_ deviceId: String) {
         if expandedDevices.contains(deviceId) {
             expandedDevices.remove(deviceId)
@@ -276,7 +257,6 @@ struct ImprovedDataPointSelector: View {
         }
     }
     
-    // Expand/collapse a category within a device
     private func toggleCategoryExpansion(deviceId: String, category: String) {
         if expandedCategories[deviceId] == nil {
             expandedCategories[deviceId] = []
@@ -290,7 +270,6 @@ struct ImprovedDataPointSelector: View {
     }
 }
 
-// For easier integration in SettingsView
 struct DataPointSelectorSheet: View {
     @ObservedObject var mqttBroker: MQTTBroker
     @Binding var selectedDataPoint: MQTTBroker.DataPoint?
@@ -307,9 +286,7 @@ struct DataPointSelectorSheet: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Search and filter area
                 VStack(spacing: 12) {
-                    // Device selector
                     Picker("Device", selection: $selectedDevice) {
                         Text("All Devices").tag(Optional<String>(nil))
                         ForEach(devices, id: \.self) { device in
@@ -326,14 +303,13 @@ struct DataPointSelectorSheet: View {
                     }
                     .pickerStyle(MenuPickerStyle())
                     
-                    // Search field
                     HStack {
                         Image(systemName: "magnifyingglass")
                             .foregroundColor(.secondary)
                         
                         TextField("Search data points", text: $searchText)
-                            .onChange(of: searchText) { _ in filterDataPoints() }
-                            .onChange(of: selectedDevice) { _ in filterDataPoints() }
+                            .onChange(of: searchText) { _, _ in filterDataPoints() }
+                            .onChange(of: selectedDevice) { _, _ in filterDataPoints() }
                         
                         if !searchText.isEmpty {
                             Button(action: {
@@ -354,7 +330,6 @@ struct DataPointSelectorSheet: View {
                 
                 Divider()
                 
-                // List of data points
                 if filteredPoints.isEmpty {
                     emptyStateView
                 } else {
@@ -421,12 +396,10 @@ struct DataPointSelectorSheet: View {
     
     private func dataPointRow(_ dataPoint: MQTTBroker.DataPoint) -> some View {
         HStack {
-            // Icon for data type
             Image(systemName: dataPoint.type.iconName)
                 .foregroundColor(dataPoint.type.color)
                 .frame(width: 24, height: 24)
             
-            // Name and path
             VStack(alignment: .leading, spacing: 4) {
                 Text(dataPoint.name)
                     .font(.headline)
@@ -439,7 +412,6 @@ struct DataPointSelectorSheet: View {
             
             Spacer()
             
-            // Current value
             Text(mqttBroker.getFormattedValue(for: dataPoint))
                 .font(.system(.body, design: .monospaced))
                 .foregroundColor(.secondary)

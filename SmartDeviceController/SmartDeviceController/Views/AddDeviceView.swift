@@ -5,136 +5,201 @@ struct AddDeviceView: View {
     
     @State private var deviceName: String = ""
     @State private var deviceLocation: String = ""
+    @State private var customLocation: String = ""
+    @State private var showingCustomLocation: Bool = false
     @State private var colorValue: Double = 0.5
-    @State private var selectedSymbol: String = "bolt.fill" // Default SF Symbol
+    @State private var selectedSymbol: String = "lightbulb.fill"
     
     var onAdd: (Device) -> Void
     
-    let locations = ["Kitchen","Sitting Room", "Hallway", "Bedroom"]
+    @State private var savedLocations: [String] = []
+    let defaultLocations = ["Kitchen", "Living Room", "Bedroom", "Bathroom"]
     
     var selectedColor: Color {
         Color(hue: colorValue * 0.83, saturation: 1, brightness: 1)
     }
     
-    let symbols = [
-        "lightbulb.fill", "powerplug.fill", "fanblades.fill",
-        "tv.fill", "display", "desktopcomputer",
-        "speaker.wave.2.fill", "wifi", "house.fill",
-        "thermometer.sun.fill", "flame.fill", "bolt.fill"
+    let symbolCategories = [
+        ("Lights & Power", ["lightbulb.fill", "light.max", "powerplug.fill", "bolt.fill"]),
+        
+        ("Appliances", ["fanblades.fill","desktopcomputer", "speaker.wave.2.fill"]),
+        
+        ("Home & Sensors", ["wifi", "house.fill", "thermometer"])
     ]
-    
     
     var body: some View {
         NavigationStack {
             Form {
                 Section(header: Text("Device Details")) {
                     TextField("Device Name", text: $deviceName)
+                        .autocapitalization(.words)
+                    
+                    if showingCustomLocation {
+                        HStack {
+                            TextField("New Location", text: $customLocation)
+                                .autocapitalization(.words)
+                            
+                            Button(action: {
+                                addCustomLocation()
+                            }) {
+                                Text("Add")
+                                    .foregroundColor(.blue)
+                            }
+                            .disabled(customLocation.isEmpty)
+                        }
+                    } else {
+                        Picker("Location", selection: $deviceLocation) {
+                            ForEach(allLocations, id: \.self) { location in
+                                Text(location).tag(location)
+                            }
+                            
+                            Divider()
+                            Text("+ New Location").tag("addNew")
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        .onChange(of: deviceLocation) { _, newValue in
+                            if newValue == "addNew" {
+                                
+                                customLocation = ""
+                                showingCustomLocation = true
+                                deviceLocation = allLocations.first ?? ""
+                            }
+                        }
+                    }
                 }
-                
-                Section(header: Text("Select Location")){
-                    Picker("Location", selection: $deviceLocation) {
-                                       ForEach(locations, id: \.self) { location in
-                                           Text(location)
-                                       }
-                                   }
-                                   .pickerStyle(MenuPickerStyle())
+                .onAppear {
+                    loadLocations()
+                    
+                    if deviceLocation.isEmpty && !allLocations.isEmpty {
+                        deviceLocation = allLocations[0]
+                    }
                 }
                 
                 Section(header: Text("Choose an Icon")) {
-                    VStack {
-                      
+                    VStack(alignment: .center, spacing: 16) {
                         Image(systemName: selectedSymbol)
                             .resizable()
                             .scaledToFit()
                             .frame(width: 50, height: 50)
-                            .foregroundColor(.black)
-                            .padding(10)
+                            .foregroundColor(selectedColor)
+                            .padding(12)
                             .background(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(Color.black, lineWidth: 2)
-                                )
-                        
-                    
-                        ScrollView {
-                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
-                                ForEach(symbols, id: \.self) { symbol in
-                                    Button(action: {
-                                        selectedSymbol = symbol
-                                    }) {
-                                        Image(systemName: symbol)
-                                            .resizable()
-                                            .scaledToFit()
-                                            .frame(width: 25, height: 25)
-                                            .padding()
-                                            .background(selectedSymbol == symbol ? Color.gray.opacity(0.2) : Color.clear)
-                                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                                Circle()
+                                    .fill(selectedColor.opacity(0.1))
+                                    .overlay(
+                                        Circle()
+                                            .stroke(selectedColor, lineWidth: 2)
+                                    )
+                            )
+                            .padding(.vertical, 10)
+                                                
+                        ForEach(symbolCategories, id: \.0) { category, symbols in
+                            VStack(alignment: .leading) {
+                                Text(category)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .padding(.leading, 4)
+                                    .padding(.top, 8)
+                                
+                                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 6), spacing: 8) {
+                                    ForEach(symbols, id: \.self) { symbol in
+                                        Button(action: {
+                                            selectedSymbol = symbol
+                                        }) {
+                                            Image(systemName: symbol)
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(width: 22, height: 22)
+                                                .padding(8)
+                                                .foregroundColor(selectedSymbol == symbol ? selectedColor : .primary)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 8)
+                                                        .fill(selectedSymbol == symbol ? selectedColor.opacity(0.15) : Color.gray.opacity(0.05))
+                                                )
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
                                     }
-                                    .buttonStyle(PlainButtonStyle())
                                 }
                             }
-                            .padding(.vertical, 5)
                         }
-                        .frame(maxHeight: 100)
                     }
+                    .padding(.vertical, 8)
                 }
                 
                 Section(header: Text("Choose a Color")) {
-                    VStack {
+                    GeometryReader { geometry in
                         ZStack(alignment: .leading) {
-                            let sliderWidth: CGFloat = 350
-                            let circleSize: CGFloat = 35
+                        
+                            let sliderWidth = max(50, geometry.size.width)
+                            let circleSize: CGFloat = 28
+                            let trackHeight: CGFloat = 20
+                            let offsetRange = sliderWidth - circleSize
                             
-                            Rectangle()
+                        
+                            RoundedRectangle(cornerRadius: trackHeight / 2)
                                 .fill(LinearGradient(
                                     gradient: Gradient(colors: [
-                                        Color(hue: 0.0, saturation: 1, brightness: 1),
-                                        Color(hue: 0.15, saturation: 1, brightness: 1),
-                                        Color(hue: 0.25, saturation: 1, brightness: 1),
-                                        Color(hue: 0.4, saturation: 1, brightness: 1),
-                                        Color(hue: 0.6, saturation: 1, brightness: 1),
-                                        Color(hue: 0.83, saturation: 1, brightness: 1)
+                                        .red, .orange, .yellow, .green, .blue, .purple, .pink
                                     ]),
                                     startPoint: .leading,
                                     endPoint: .trailing
                                 ))
-                                .frame(width: sliderWidth, height: 30)
-                                .cornerRadius(15)
+                                .frame(height: trackHeight)
                             
+                           
                             Circle()
                                 .fill(selectedColor)
                                 .frame(width: circleSize, height: circleSize)
-                                .offset(x: CGFloat(colorValue * (sliderWidth - circleSize)))
+                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .shadow(color: Color.black.opacity(0.15), radius: 2, x: 0, y: 1)
+                                .offset(x: colorValue * offsetRange)
                                 .gesture(
                                     DragGesture(minimumDistance: 0)
                                         .onChanged { value in
-                                            let newValue = min(max(0, value.location.x / sliderWidth), 1)
-                                            colorValue = newValue
+                                            if sliderWidth > 0 {
+                                                let rawValue = value.location.x / sliderWidth
+                                                colorValue = min(max(0, rawValue), 1)
+                                            }
                                         }
                                 )
                         }
-                        .frame(width: 350, height: 35)
-                        .clipped()
+                        .frame(height: 50)
                     }
-                    .padding(.vertical, 10)
+                    .frame(height: 50)
+                    .padding(.vertical, 8)
                 }
+            
                 
-                Button("Add Device") {
-                    let newDevice = Device(
-                        id: Int.random(in: 1000...9999),
-                        name: deviceName,
-                        location: deviceLocation,
-                        color: selectedColor,
-                        image: selectedSymbol
-                    )
-                    onAdd(newDevice)
-                    dismiss()
+                Section {
+                    Button(action: {
+                        let newDevice = Device(
+                            id: Int.random(in: 1000...9999),
+                            name: deviceName,
+                            location: deviceLocation,
+                            color: selectedColor,
+                            image: selectedSymbol
+                        )
+                        onAdd(newDevice)
+                        dismiss()
+                    }) {
+                        HStack {
+                            Spacer()
+                            Image(systemName: "plus.circle.fill")
+                                .font(.headline)
+                                .padding(.trailing, 4)
+                            Text("Add Device")
+                                .font(.headline)
+                            Spacer()
+                        }
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                    }
+                    .disabled(deviceName.isEmpty || deviceLocation.isEmpty)
+                    .listRowInsets(EdgeInsets())
+                    .padding(.vertical, 8)
                 }
-                .disabled(deviceName.isEmpty || deviceLocation.isEmpty)
-                .foregroundColor(.white)
-                .padding()
-                .frame(maxWidth: .infinity)
-                .background(Color.blue)
-                .cornerRadius(8)
             }
             .navigationTitle("Add Device")
             .toolbar {
@@ -146,5 +211,45 @@ struct AddDeviceView: View {
             }
         }
     }
+    
+    private var allLocations: [String] {
+        
+        var combinedLocations = Set(defaultLocations)
+        combinedLocations.formUnion(savedLocations)
+
+        return Array(combinedLocations).sorted()
+    }
+    
+    private func addCustomLocation() {
+        guard !customLocation.isEmpty else { return }
+        
+        if !savedLocations.contains(customLocation) {
+            savedLocations.append(customLocation)
+            saveLocations()
+            
+        }
+        
+        deviceLocation = customLocation
+        
+        customLocation = ""
+        showingCustomLocation = false
+    }
+    
+    private func saveLocations() {
+        UserDefaults.standard.set(savedLocations, forKey: "savedDeviceLocations")
+    }
+    
+    private func loadLocations() {
+        if let locations = UserDefaults.standard.stringArray(forKey: "savedDeviceLocations") {
+            savedLocations = locations
+        } else {
+            savedLocations = []
+        }
+    }
 }
 
+struct AddDeviceView_Previews: PreviewProvider {
+    static var previews: some View {
+        AddDeviceView { _ in }
+    }
+}

@@ -6,7 +6,7 @@
 #
 # gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
 
-SmartDeviceController/HiveMQ.swift
+SmartDeviceController/MQTTConfig.swift
 ## User settings
 xcuserdata/
 

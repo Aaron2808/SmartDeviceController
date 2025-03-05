@@ -4,48 +4,6 @@
 //
 //  Created by Aaron Flynn on 02/02/2025.
 //
-
-import SwiftUI
-
-struct DeviceCard: View {
-    let device: Device
-    
-    var body: some View {
-        VStack(spacing:0) {
-            Rectangle()
-                .fill()
-                .foregroundStyle(device.color)
-                .frame(height: 10)
-                .frame(maxWidth: .infinity)
-            
-            Text(device.name)
-                .font(.system(size: 16).bold())
-                .foregroundColor(.primary)
-                .padding(.top, 10)
-               
-            Spacer()
-            
-            Image(systemName: device.image)
-                .resizable()
-                .scaledToFit()
-                .foregroundStyle(.black.opacity(0.6))
-                .frame(width: 35, height: 35)
-            
-            Spacer()
-            
-            Text(device.location)
-                .font(.subheadline)
-                .foregroundColor(.black.opacity(0.7))
-                .padding(.bottom, 10)
-        }
-        .frame(width: 150, height: 150, alignment: .top)
-        .background(.white)
-        .cornerRadius(10)
-        .shadow(radius: 2)
-    }
-
-}
-
 import SwiftUI
 
 struct DeviceGridView: View {
@@ -54,13 +12,12 @@ struct DeviceGridView: View {
     @State private var showMQTTDevices = false
     @State private var isConnecting = false
     
-    // Fix: Use a consistent reference to the shared MQTTBroker instance
     @ObservedObject private var mqttBroker = MQTTBroker.shared
     
     @State private var devices: [Device] = [
         Device(id: 1, name: "Smart Light", location: "Kitchen", color: .blue, image: "lightbulb"),
-        Device(id: 2, name: "Thermostat", location: "Living Room", color: .yellow, image: "lightbulb"),
-        Device(id: 3, name: "Smart Plug", location: "Kitchen", color: .red, image: "lightbulb"),
+        Device(id: 2, name: "Thermostat", location: "Living Room", color: .yellow, image: "thermometer"),
+        Device(id: 3, name: "Smart Plug", location: "Kitchen", color: .red, image: "poweroutlet.type.g"),
         Device(id: 4, name: "Security Camera", location: "Camera" ,color: .orange, image: "lightbulb")
     ]
     
@@ -173,7 +130,6 @@ struct DeviceGridView: View {
             }
         }
         .onAppear {
-            // Fix: Use a proper cancellable task for connection attempt
             ensureConnected()
         }
     }
@@ -182,22 +138,17 @@ struct DeviceGridView: View {
         devices.removeAll { $0.id == device.id }
     }
     
-    // Fix: Improved connection handling
     private func ensureConnected() {
         if !mqttBroker.isConnected {
             isConnecting = true
             
-            // Attempt connection
             mqttBroker.autoConnect()
             
-            // Use a proper timeout mechanism
             DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                 self.isConnecting = false
                 
-                // If still not connected after timeout, show an error
                 if !self.mqttBroker.isConnected {
                     print("Failed to connect automatically")
-                    // You could add an alert or notification here
                 }
             }
         }
@@ -207,7 +158,6 @@ struct DeviceGridView: View {
         Group {
             if isConnecting {
                 HStack {
-                    Text("Connecting to MQTT...")
                     ProgressView()
                 }
                 .padding(6)
