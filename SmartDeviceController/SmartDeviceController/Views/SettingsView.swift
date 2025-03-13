@@ -80,6 +80,8 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            
+            
         }
         .onAppear {
             isConnected = mqttBroker.isConnected

@@ -189,7 +189,6 @@ struct ModuleSelect: View {
                 }
                 
                 Section(header: Text("Appearance")) {
-                    // Icon selection
                     Button(action: {
                         showIconPicker = true
                     }) {
@@ -226,27 +225,6 @@ struct ModuleSelect: View {
                         .padding(.vertical)
                     }
                 }
-                
-
-                if let dataPoint = selectedDataPoint {
-                    Section(header: Text("Data Point Preview")) {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(dataPoint.name)
-                                    .font(.headline)
-                                Text(dataPoint.path)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Spacer()
-                            
-                            Text(mqttBroker.getFormattedValue(for: dataPoint))
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
             }
             .navigationBarTitle("Configure Module", displayMode: .inline)
             .navigationBarItems(
@@ -263,18 +241,15 @@ struct ModuleSelect: View {
                 )
             }
             .onAppear {
-                // Initialize with the module type settings
                 if moduleType == .dataDisplay {
                     useDataPoint = true
                 }
                 
-                // Set color from existing customColor if available
                 colorValue = ControlHelpers.initializeColorValue(
                     customColor: customColor,
                     controlType: moduleType
                 )
                 
-                // Ensure initial color is set
                 if customColor == nil {
                     customColor = selectedColor.toHex()
                 }

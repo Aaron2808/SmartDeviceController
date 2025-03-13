@@ -1,9 +1,3 @@
-//
-//  DeviceGridView.swift
-//  SmartDeviceController
-//
-//  Created by Aaron Flynn on 02/02/2025.
-//
 import SwiftUI
 
 struct DeviceGridView: View {
@@ -11,14 +5,16 @@ struct DeviceGridView: View {
     @State private var showAddDeviceForm = false
     @State private var showMQTTDevices = false
     @State private var isConnecting = false
+    @State private var showSideMenu = false
+    @State private var showEnergyCostView = false
     
     @ObservedObject private var mqttBroker = MQTTBroker.shared
     
     @State private var devices: [Device] = [
+        Device(id: 3, name: "Smart Plug", location: "Kitchen", color: .red, image: "poweroutlet.type.g"),
         Device(id: 1, name: "Smart Light", location: "Kitchen", color: .blue, image: "lightbulb"),
         Device(id: 2, name: "Thermostat", location: "Living Room", color: .yellow, image: "thermometer"),
-        Device(id: 3, name: "Smart Plug", location: "Kitchen", color: .red, image: "poweroutlet.type.g"),
-        Device(id: 4, name: "Security Camera", location: "Camera" ,color: .orange, image: "lightbulb")
+        Device(id: 4, name: "Humidity Sensor", location: "Hall" ,color: .orange, image: "humidifier")
     ]
     
     let columns = [
@@ -27,110 +23,119 @@ struct DeviceGridView: View {
     ]
     
     var body: some View {
-        NavigationStack {
-            
-            VStack(spacing: 0) {
-                HStack {
-                    Button(action: {
-                       
-                    }) {
-                        Image(systemName: "list.bullet")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 25, height: 25)
-                            .foregroundColor(.black).opacity(0.5)
+        ZStack {
+            NavigationStack {
+                VStack(spacing: 0) {
+                    HStack {
+                        Button(action: {
+                            withAnimation(.easeInOut) {
+                                showSideMenu = true
+                            }
+                        }) {
+                            Image(systemName: "list.bullet")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 25, height: 25)
+                                .foregroundColor(.black).opacity(0.5)
+                                .padding(30)
+                        }
+                        
+                        Spacer()
+                        
+                        Text("Devices")
+                            .font(.system(size: 25))
+                            .bold()
                             .padding(30)
+                    
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            settingView = true
+                        }) {
+                            Image(systemName: "gearshape")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 25, height: 25)
+                                .foregroundColor(.black).opacity(0.5)
+                                .padding(30)
+                        }
+                        .navigationDestination(isPresented: $settingView) {
+                            SettingsView()
+                                .navigationTitle("Settings")
+                        }
+                        
                     }
+                    .frame(maxWidth: .infinity, maxHeight: 40)
                     
-                    Spacer()
+                    connectionStatusView
+                        .padding(.horizontal)
+                        .padding(.top, 4)
                     
-                    Text("Devices")
-                        .font(.system(size: 25))
-                        .bold()
-                        .padding(30)
-                
-                    
-                    Spacer()
-                    
-                    Button(action: {
-                        settingView = true
-                    }) {
-                        Image(systemName: "gearshape")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 25, height: 25)
-                            .foregroundColor(.black).opacity(0.5)
-                            .padding(30)
-                    }
-                    .navigationDestination(isPresented: $settingView) {
-                        SettingsView()
-                            .navigationTitle("Settings")
-                    }
-                    
-                }
-                .frame(maxWidth: .infinity, maxHeight: 40)
-                
-                // Add connection status view here
-                connectionStatusView
-                    .padding(.horizontal)
-                    .padding(.top, 4)
-                
-                VStack {
-                    if(!devices.isEmpty){
-                        ScrollView {
-                            LazyVGrid(columns: columns, spacing: 20) {
-                                ForEach(devices) { device in
-                                    NavigationLink(destination: DeviceControlView(device: device)) {
-                                        DeviceCard(device: device)
-                                    }
-                                    .contextMenu {
-                                        Button(role: .destructive) {
-                                            deleteDevice(device)
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
+                    VStack {
+                        if(!devices.isEmpty){
+                            ScrollView {
+                                LazyVGrid(columns: columns, spacing: 20) {
+                                    ForEach(devices) { device in
+                                        NavigationLink(destination: DeviceControlView(device: device)) {
+                                            DeviceCard(device: device)
+                                        }
+                                        .contextMenu {
+                                            Button(role: .destructive) {
+                                                deleteDevice(device)
+                                            } label: {
+                                                Label("Delete", systemImage: "trash")
+                                            }
                                         }
                                     }
                                 }
                             }
+                            .padding()
+                            .background(.gray.opacity(0.1))
                         }
-                        .padding()
-                        .background(.gray.opacity(0.1))
-                    }
-                    else{
-                       
-                        VStack{
-                            Spacer()
-                            Text("No Devices Available")
-                                .foregroundColor(.black)
-                            Spacer()
-                        }
-                        .frame(maxWidth:.infinity, maxHeight: .infinity)
-                        .background(.gray.opacity(0.1))
-                    }
-                            
-                
-                    VStack{
-                        Button(action: {
-                            showAddDeviceForm = true
-                        }) {
-                            Text("Add Device")
-                                .foregroundColor(.white)
-                                .frame(width: 200, height:50)
-                                .background(Color.blue)
-                                .cornerRadius(15)
-                        }
-                        .padding()
-                        .sheet(isPresented: $showAddDeviceForm) {
-                            AddDeviceView { newDevice in
-                                devices.append(newDevice)
+                        else{
+                           
+                            VStack{
+                                Spacer()
+                                Text("No Devices Available")
+                                    .foregroundColor(.black)
+                                Spacer()
                             }
+                            .frame(maxWidth:.infinity, maxHeight: .infinity)
+                            .background(.gray.opacity(0.1))
                         }
-                    }.frame(maxWidth: .infinity, maxHeight: 70)
+                                
+                    
+                        VStack{
+                            Button(action: {
+                                showAddDeviceForm = true
+                            }) {
+                                Text("Add Device")
+                                    .foregroundColor(.white)
+                                    .frame(width: 200, height:50)
+                                    .background(Color.blue)
+                                    .cornerRadius(15)
+                            }
+                            .padding()
+                            .sheet(isPresented: $showAddDeviceForm) {
+                                AddDeviceView { newDevice in
+                                    devices.append(newDevice)
+                                }
+                            }
+                        }.frame(maxWidth: .infinity, maxHeight: 70)
+                    }
+                }
+                .navigationDestination(isPresented: $showEnergyCostView) {
+                    EnergyCostView()
                 }
             }
-        }
-        .onAppear {
-            ensureConnected()
+            .onAppear {
+                ensureConnected()
+            }
+            
+            // Side menu overlay
+            SideMenuView(isShowing: $showSideMenu, showEnergyCostView: $showEnergyCostView)
+                .opacity(showSideMenu ? 1 : 0)
         }
     }
     

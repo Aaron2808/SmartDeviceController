@@ -85,7 +85,6 @@ struct DataSelect: View {
             .padding(.horizontal)
             .padding(.top)
             
-            // Data points list
             if devices.isEmpty {
                 noDeviceView
             } else {
@@ -165,7 +164,6 @@ struct DataSelect: View {
                             .cornerRadius(8)
                     }
                     
-                    // Online status indicator
                     if let isOnline = mqttBroker.deviceContexts[deviceId]?.isOnline {
                         Circle()
                             .fill(isOnline ? Color.green : Color.red)

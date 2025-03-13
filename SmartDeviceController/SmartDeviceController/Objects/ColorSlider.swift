@@ -51,7 +51,6 @@ struct ColorSliderView: View {
                 let trackHeight: CGFloat = 16
                 let offsetRange = sliderWidth - circleSize
                 
-                // Color gradient track
                 RoundedRectangle(cornerRadius: trackHeight / 2)
                     .fill(LinearGradient(
                         gradient: Gradient(colors: [
@@ -62,7 +61,6 @@ struct ColorSliderView: View {
                     ))
                     .frame(height: trackHeight)
                 
-                // Thumb
                 Circle()
                     .fill(selectedColor)
                     .frame(width: circleSize, height: circleSize)

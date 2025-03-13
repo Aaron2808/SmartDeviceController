@@ -29,10 +29,8 @@ struct EditControlView: View {
     @State private var showBackgroundColorPicker = false
     @State private var showTextColorPicker = false
     
-    // Color slider value (0-1)
     @State private var colorValue: Double = 0.5
     
-    // Color from the slider
     var selectedColor: Color {
         Color(hue: colorValue * 0.83, saturation: 1, brightness: 1)
     }
@@ -56,15 +54,12 @@ struct EditControlView: View {
         _maxValue = State(initialValue: control.maxValue)
         _displayName = State(initialValue: control.displayName)
         _useDataPoint = State(initialValue: control.dataPointId != nil)
-        
-        // Initialize customization options
         _customColor = State(initialValue: control.customColor)
         _customIcon = State(initialValue: control.customIcon)
         _customUnit = State(initialValue: control.customUnit)
         _backgroundColor = State(initialValue: control.backgroundColor)
         _textColor = State(initialValue: control.textColor)
         
-        // Initialize color slider value using shared helper
         _colorValue = State(initialValue: ControlHelpers.initializeColorValue(
             customColor: control.customColor,
             controlType: control.controlType
@@ -230,12 +225,11 @@ struct EditControlView: View {
                 }
                 
                 Section(header: Text("Appearance")) {
-                    // Icon selection
                     Button(action: {
                         showIconPicker = true
                     }) {
                         HStack {
-                            Text("Module Icon")
+                            Text("Module Icon").foregroundStyle(.black)
                             Spacer()
                             Image(systemName: customIcon ?? control.getIconName())
                                 .foregroundColor(selectedColor)
@@ -253,7 +247,6 @@ struct EditControlView: View {
                         )
                     }
                     
-                    // Color slider using shared component
                     ColorSliderView(colorValue: $colorValue, customColor: $customColor)
                     
                 }
@@ -304,7 +297,6 @@ struct EditControlView: View {
                     customTopicInput = selectedTopic
                 }
                 
-                // Ensure we have a color set
                 if customColor == nil {
                     customColor = selectedColor.toHex()
                 }
@@ -337,7 +329,6 @@ struct EditControlView: View {
     }
     
     private func shouldDisableSave() -> Bool {
-            // For data display, we need a data point
             if control.controlType == .dataDisplay {
                 if useDataPoint {
                     return selectedDataPoint == nil
@@ -345,7 +336,6 @@ struct EditControlView: View {
                 return selectedTopic.isEmpty
             }
             
-            // For other modules
             if useDataPoint {
                 return selectedDataPoint == nil
             }
@@ -359,7 +349,6 @@ struct EditControlView: View {
                 selectedTopic = customTopicInput
             }
             
-            // Ensure we've set the custom color from the slider
             customColor = selectedColor.toHex()
             
             let updatedControl = createUpdatedControl()

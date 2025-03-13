@@ -77,7 +77,6 @@ struct DeviceControl: Codable, Identifiable {
             return colorForControlType(controlType)
         }
         
-        // Try to create color from hex, fall back to default if it fails
         return Color(hex: hexString) ?? colorForControlType(controlType)
     }
 
@@ -86,7 +85,6 @@ struct DeviceControl: Codable, Identifiable {
             return Color(.secondarySystemBackground)
         }
         
-        // Try to create color from hex, fall back to default if it fails
         return Color(hex: hexString) ?? Color(.secondarySystemBackground)
     }
 
@@ -95,12 +93,10 @@ struct DeviceControl: Codable, Identifiable {
             return .primary
         }
         
-        // Try to create color from hex, fall back to default if it fails
         return Color(hex: hexString) ?? .primary
     }
 
     func getIconName() -> String {
-        // If custom icon is nil or empty, use default icon for this control type
         return (customIcon != nil && !customIcon!.isEmpty)
             ? customIcon!
             : iconForControlType(controlType)
@@ -119,7 +115,6 @@ struct DeviceControl: Codable, Identifiable {
         }
     }
     
-    // Also replace your existing colorForControlType method to ensure consistent colors:
     private func colorForControlType(_ type: ControlType) -> Color {
         switch type {
         case .button:

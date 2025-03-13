@@ -48,17 +48,13 @@ struct ControlView: View {
                     sliderValue = control.minValue
                 }
             } else if control.controlType == .toggle {
-                // For toggle, check the current state from MQTT
                 if let topicValue = mqttBroker.getValue(topic: control.topic) {
-                    // Try to determine the current state
                     if let boolValue = topicValue.asBool() {
                         isToggleOn = boolValue
                     } else if case .text(let stringValue) = topicValue {
-                        // If we have text, check if it matches our "on" message
                         isToggleOn = stringValue.lowercased() == control.message.lowercased()
                     }
                 } else {
-                    // Default state if no data exists
                     isToggleOn = false
                 }
             } else if control.controlType == .dataDisplay {
@@ -82,7 +78,10 @@ struct ControlView: View {
         var updatedValue: String? = nil
         
         if let dataPointId = control.dataPointId, !dataPointId.isEmpty {
-            if let value = mqttBroker.getDataByPath(dataPointId) {
+            if let dataPoint = mqttBroker.getDataPointById(dataPointId),
+               let value = mqttBroker.getValue(for: dataPoint) {
+                updatedValue = formatValue(value)
+            } else if let value = mqttBroker.getDataByPath(dataPointId) {
                 updatedValue = formatValue(value)
             }
         }
@@ -102,13 +101,13 @@ struct ControlView: View {
                         for (key, value) in dict {
                             if key.lowercased() == displayNameLower {
                                 if let numValue = value as? Double {
-                                    updatedValue = format(.number(numValue))
+                                    updatedValue = formatValue(.number(numValue))
                                 } else if let intValue = value as? Int {
-                                    updatedValue = format(.number(Double(intValue)))
+                                    updatedValue = formatValue(.number(Double(intValue)))
                                 } else if let boolValue = value as? Bool {
-                                    updatedValue = format(.boolean(boolValue))
+                                    updatedValue = formatValue(.boolean(boolValue))
                                 } else if let strValue = value as? String {
-                                    updatedValue = format(.text(strValue))
+                                    updatedValue = formatValue(.text(strValue))
                                 }
                             }
                         }
@@ -116,11 +115,11 @@ struct ControlView: View {
                         if updatedValue == nil && displayNameLower == "temperature" {
                             if let tempObj = dict["temperature"] as? [String: Any],
                                let tempC = tempObj["tC"] as? Double {
-                                updatedValue = format(.number(tempC))
+                                updatedValue = formatValue(.number(tempC))
                             }
                         } else if updatedValue == nil && displayNameLower == "power" {
                             if let power = dict["apower"] as? Double {
-                                updatedValue = format(.number(power))
+                                updatedValue = formatValue(.number(power))
                             }
                         }
                     }
@@ -128,19 +127,16 @@ struct ControlView: View {
             }
         }
         
-        if let newValue = updatedValue {
-            if newValue != displayValue {
-                displayValue = newValue
-            }
+        if updatedValue == nil {
+            updatedValue = "--"
+        }
+        
+        if let newValue = updatedValue, newValue != displayValue {
+            displayValue = newValue
         }
     }
     
-    private func format(_ value: MQTTBroker.DataValue) -> String {
-        return formatValue(value)
-    }
-    
     private func formatValue(_ value: MQTTBroker.DataValue) -> String {
-        
         if let numValue = value.asDouble() {
             if control.controlType == .dataDisplay {
                 return formatWithUnit(numValue, defaultUnit: "")
@@ -149,8 +145,7 @@ struct ControlView: View {
         
         return value.formattedString()
     }
-    
-    
+
     private func formatWithUnit(_ value: Double, defaultUnit: String) -> String {
         let formattedNumber: String
         
@@ -160,12 +155,28 @@ struct ControlView: View {
             formattedNumber = String(format: "%.1f", value)
         }
         
-        let unitToShow = control.customUnit ?? defaultUnit
+        let unitToShow: String
+        if let customUnit = control.customUnit, !customUnit.isEmpty {
+            unitToShow = customUnit
+        } else if let dataPointId = control.dataPointId,
+                  let dataPoint = mqttBroker.getDataPointById(dataPointId),
+                  let unit = dataPoint.unit, !unit.isEmpty {
+            unitToShow = unit
+        } else {
+            unitToShow = defaultUnit
+        }
+        
         return "\(formattedNumber)\(unitToShow)"
     }
-    
+
     private func formatPreviewValue(_ value: String, _ defaultUnit: String) -> String {
-        let unit = control.customUnit ?? defaultUnit
+        let unit: String
+        if let customUnit = control.customUnit, !customUnit.isEmpty {
+            unit = customUnit
+        } else {
+            unit = defaultUnit
+        }
+        
         return "\(value)\(unit)"
     }
     
@@ -220,23 +231,24 @@ struct ControlView: View {
             
             
         case .dataDisplay:
-                    VStack {
-                        if isPreview && (control.message.isEmpty || control.message == "--") {
-                            let placeholderValue = control.customUnit != nil ?
-                                "23.5\(control.customUnit!)" :
-                                "23.5°"
-                            
-                            Text(placeholderValue)
-                                .font(.system(size: 32, weight: .medium))
-                                .foregroundColor(control.getCustomColor())
-                                .opacity(0.7)
-                        } else {
-                            Text(isPreview ? formatPreviewValue(control.message, "") : displayValue)
-                                .font(.system(size: 32, weight: .medium))
-                                .foregroundColor(control.getCustomColor())
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
+            VStack {
+                if isPreview && (control.message.isEmpty || control.message == "--") {
+
+                    let previewValue = "0"
+                    let previewUnit = control.customUnit ?? "°"
+                    let displayText = "\(previewValue)\(previewUnit)"
+                    
+                    Text(displayText)
+                        .font(.system(size: 32, weight: .medium))
+                        .foregroundColor(control.getCustomColor())
+                        .opacity(0.7)
+                } else {
+                    Text(isPreview ? formatPreviewValue(control.message, "") : displayValue)
+                        .font(.system(size: 32, weight: .medium))
+                        .foregroundColor(control.getCustomColor())
+                }
+            }
+            .frame(maxWidth: .infinity)
         }
     }
     
