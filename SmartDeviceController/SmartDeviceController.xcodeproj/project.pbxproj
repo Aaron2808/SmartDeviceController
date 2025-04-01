@@ -36,9 +36,34 @@
 		37AFA9C02D529A3000F8D1C2 /* ca.crt */ = {isa = PBXFileReference; lastKnownFileType = text; path = ca.crt; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		37742B972D9AFA0100A58EB2 /* Exceptions for "SmartDeviceController" folder in "SmartDeviceController" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+				Models/EnergyDataModel.xcdatamodeld,
+			);
+			target = 37AFA9122D35734500F8D1C2 /* SmartDeviceController */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		37742B982D9AFA0100A58EB2 /* Exceptions for "SmartDeviceController" folder in "Compile Sources" phase from "SmartDeviceController" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = 37AFA90F2D35734500F8D1C2 /* Sources */;
+			membershipExceptions = (
+				Models/EnergyDataModel.xcdatamodeld,
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		37AFA9152D35734500F8D1C2 /* SmartDeviceController */ = {
+		37742B762D9AFA0000A58EB2 /* SmartDeviceController */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				37742B972D9AFA0100A58EB2 /* Exceptions for "SmartDeviceController" folder in "SmartDeviceController" target */,
+				37742B982D9AFA0100A58EB2 /* Exceptions for "SmartDeviceController" folder in "Compile Sources" phase from "SmartDeviceController" target */,
+			);
 			path = SmartDeviceController;
 			sourceTree = "<group>";
 		};
@@ -85,10 +110,10 @@
 			children = (
 				37AFA9BF2D529A1E00F8D1C2 /* Certificates */,
 				37AFA98F2D3E50E200F8D1C2 /* Git */,
-				37AFA9152D35734500F8D1C2 /* SmartDeviceController */,
 				37AFA9262D35734700F8D1C2 /* Tests */,
 				37AFA9302D35734700F8D1C2 /* UITests */,
 				37AFA9142D35734500F8D1C2 /* Products */,
+				37742B762D9AFA0000A58EB2 /* SmartDeviceController */,
 			);
 			sourceTree = "<group>";
 		};
@@ -134,7 +159,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				37AFA9152D35734500F8D1C2 /* SmartDeviceController */,
+				37742B762D9AFA0000A58EB2 /* SmartDeviceController */,
 			);
 			name = SmartDeviceController;
 			packageProductDependencies = (
@@ -430,6 +455,7 @@
 				DEVELOPMENT_TEAM = 6U977QFCQ2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SmartDeviceController/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -459,6 +485,7 @@
 				DEVELOPMENT_TEAM = 6U977QFCQ2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SmartDeviceController/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

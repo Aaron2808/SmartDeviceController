@@ -2,7 +2,9 @@ import SwiftUI
 
 struct ModuleSelect: View {
     let moduleType: ControlType
-    let topics: [String]
+    let topics: [String]  // These topics should be pre-filtered for the device
+    let deviceId: Int?    // Optional device ID for data point filtering
+    
     @Binding var selectedTopic: String
     @Binding var message: String
     @Binding var minValue: Double
@@ -25,12 +27,55 @@ struct ModuleSelect: View {
     
     @State private var showDataPointSelector = false
     @State private var showIconPicker = false
+    @State private var readyToSave: Bool = false
     
     var selectedColor: Color {
         Color(hue: colorValue * 0.83, saturation: 1, brightness: 1)
     }
     
     @ObservedObject private var mqttBroker = MQTTBroker.shared
+    
+    // Initialize without deviceId for backward compatibility
+    init(moduleType: ControlType, topics: [String], selectedTopic: Binding<String>, message: Binding<String>, minValue: Binding<Double>, maxValue: Binding<Double>, displayName: Binding<String>, selectedDataPoint: Binding<MQTTBroker.DataPoint?>, useDataPoint: Binding<Bool>, customColor: Binding<String?>, customIcon: Binding<String?>, customUnit: Binding<String?>, backgroundColor: Binding<String?>, textColor: Binding<String?>, onSave: @escaping () -> Void, onCancel: @escaping () -> Void) {
+        self.moduleType = moduleType
+        self.topics = topics
+        self.deviceId = nil
+        self._selectedTopic = selectedTopic
+        self._message = message
+        self._minValue = minValue
+        self._maxValue = maxValue
+        self._displayName = displayName
+        self._selectedDataPoint = selectedDataPoint
+        self._useDataPoint = useDataPoint
+        self._customColor = customColor
+        self._customIcon = customIcon
+        self._customUnit = customUnit
+        self._backgroundColor = backgroundColor
+        self._textColor = textColor
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
+    
+    // Initialize with deviceId for device-specific filtering
+    init(moduleType: ControlType, topics: [String], deviceId: Int, selectedTopic: Binding<String>, message: Binding<String>, minValue: Binding<Double>, maxValue: Binding<Double>, displayName: Binding<String>, selectedDataPoint: Binding<MQTTBroker.DataPoint?>, useDataPoint: Binding<Bool>, customColor: Binding<String?>, customIcon: Binding<String?>, customUnit: Binding<String?>, backgroundColor: Binding<String?>, textColor: Binding<String?>, onSave: @escaping () -> Void, onCancel: @escaping () -> Void) {
+        self.moduleType = moduleType
+        self.topics = topics
+        self.deviceId = deviceId
+        self._selectedTopic = selectedTopic
+        self._message = message
+        self._minValue = minValue
+        self._maxValue = maxValue
+        self._displayName = displayName
+        self._selectedDataPoint = selectedDataPoint
+        self._useDataPoint = useDataPoint
+        self._customColor = customColor
+        self._customIcon = customIcon
+        self._customUnit = customUnit
+        self._backgroundColor = backgroundColor
+        self._textColor = textColor
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
     
     var body: some View {
         NavigationView {
@@ -76,13 +121,33 @@ struct ModuleSelect: View {
                                         selectedTopic = newValue
                                     }
                             } else {
-                                Picker("MQTT Topic", selection: $selectedTopic) {
-                                    Text("Select a Topic").tag("")
-                                    ForEach(topics, id: \.self) { topic in
-                                        Text(topic).tag(topic)
+                                if topics.isEmpty {
+                                    Text("No topics available for this device")
+                                        .foregroundColor(.secondary)
+                                        .italic()
+                                } else {
+                                    Picker("MQTT Topic", selection: $selectedTopic) {
+                                        Text("Select a Topic").tag("")
+                                        ForEach(topics, id: \.self) { topic in
+                                            Text(topic).tag(topic)
+                                        }
                                     }
                                 }
                             }
+                        }
+                    }
+                    
+                    // If a device is specified, show the device topic as info
+                    if let deviceId = deviceId,
+                       let device = DeviceManager.shared.getDevice(withId: deviceId),
+                       let deviceTopic = device.mqttTopic,
+                       !deviceTopic.isEmpty {
+                        HStack {
+                            Image(systemName: "link")
+                                .foregroundColor(.blue)
+                            Text("Device topic: \(deviceTopic)")
+                                .font(.caption)
+                                .foregroundColor(.blue)
                         }
                     }
                 }
@@ -145,15 +210,114 @@ struct ModuleSelect: View {
                                 .disableAutocorrection(true)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                             }
-                    case .slider:
-                        HStack {
-                            Text("Min:")
-                            TextField("Min Value", value: $minValue, formatter: NumberFormatter())
-                        }
-                        HStack {
-                            Text("Max:")
-                            TextField("Max Value", value: $maxValue, formatter: NumberFormatter())
-                        }
+                        
+                        case .slider:
+                            VStack(spacing: 12) {
+                                HStack {
+                                    Text("Min:")
+                                    TextField("Min Value", value: $minValue, formatter: NumberFormatter())
+                                        .keyboardType(.numberPad)
+                                }
+                                
+                                HStack {
+                                    Text("Max:")
+                                    TextField("Max Value", value: $maxValue, formatter: NumberFormatter())
+                                        .keyboardType(.numberPad)
+                                }
+                                
+                                // Add a test slider to verify configuration
+                                if minValue < maxValue {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Test slider:")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                        
+                                        // Local state for test slider
+                                        let testBinding = Binding<Double>(
+                                            get: { (minValue + maxValue) / 2 },
+                                            set: { _ in }
+                                        )
+                                        
+                                        Slider(value: testBinding, in: minValue...maxValue)
+                                            .accentColor(selectedColor)
+                                            .disabled(true)
+                                        
+                                        HStack {
+                                            Text("\(Int(minValue))")
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                            
+                                            Spacer()
+                                            
+                                            Text("\(Int((minValue + maxValue) / 2))")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                            
+                                            Spacer()
+                                            
+                                            Text("\(Int(maxValue))")
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                    .padding(.vertical, 8)
+                                }
+                                
+                                Divider()
+                                
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("JSON Payload (Optional)")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                    
+                                    HStack {
+                                        Text("Property name:")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                        
+                                        TextField("brightness", text: $message)
+                                            .autocapitalization(.none)
+                                            .disableAutocorrection(true)
+                                            .onChange(of: message) { oldValue, newValue in
+                                                // Remove any JSON characters if user starts typing them
+                                                if newValue.contains("{") || newValue.contains("}") || newValue.contains(":") {
+                                                    let cleanedText = newValue
+                                                        .replacingOccurrences(of: "{", with: "")
+                                                        .replacingOccurrences(of: "}", with: "")
+                                                        .replacingOccurrences(of: "\"", with: "")
+                                                        .replacingOccurrences(of: ":", with: "")
+                                                    message = cleanedText
+                                                }
+                                            }
+                                    }
+                                    
+                                    if !message.isEmpty {
+                                        // Show preview of the formatted payload
+                                        let formattedPayload = "{\"\(message)\": \(Int((minValue + maxValue) / 2))}"
+                                        
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("Preview:")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                            
+                                            Text(formattedPayload)
+                                                .font(.system(.caption, design: .monospaced))
+                                                .padding(6)
+                                                .background(Color.blue.opacity(0.1))
+                                                .cornerRadius(4)
+                                        }
+                                        .padding(.top, 8)
+                                        
+                                        Text("The value will be automatically inserted when slider moves")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    } else {
+                                        Text("Leave empty to send raw value without JSON formatting")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
                     case .dataDisplay:
                         if selectedDataPoint == nil {
                             Text("Please select a data point to display")
@@ -193,7 +357,7 @@ struct ModuleSelect: View {
                         showIconPicker = true
                     }) {
                         HStack {
-                            Text("Module Icon").foregroundColor(.black)
+                            Text("Module Icon").foregroundColor(.primary)
                             Spacer()
                             Image(systemName: customIcon ?? ControlHelpers.iconForControlType(moduleType))
                                 .foregroundColor(selectedColor)
@@ -216,7 +380,7 @@ struct ModuleSelect: View {
                 
                 Section(header: Text("Preview")) {
                     VStack {
-                        ControlView(
+                        ControlInterfaceView(
                             control: createPreviewControl(),
                             onAction: { _ in },
                             isPreview: true
@@ -225,19 +389,34 @@ struct ModuleSelect: View {
                         .padding(.vertical)
                     }
                 }
+                
+                Section {
+                    Button("Save") {
+                        saveModule()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .foregroundColor(.white)
+                    .padding()
+                    .background(Color.blue)
+                    .cornerRadius(10)
+                    .disabled(shouldDisableSaveButton)
+                }
+                .listRowInsets(EdgeInsets())
+                .padding()
             }
             .navigationBarTitle("Configure Module", displayMode: .inline)
             .navigationBarItems(
                 leading: Button("Cancel", action: onCancel),
                 trailing: Button("Save") {
-                    saveModule()
+                    prepareAndSave()
                 }
                 .disabled(shouldDisableSaveButton)
             )
             .sheet(isPresented: $showDataPointSelector) {
                 DataPointSelectorSheet(
                     mqttBroker: mqttBroker,
-                    selectedDataPoint: $selectedDataPoint
+                    selectedDataPoint: $selectedDataPoint,
+                    deviceId: deviceId  // Pass device ID for filtering
                 )
             }
             .onAppear {
@@ -274,8 +453,15 @@ struct ModuleSelect: View {
         case .toggle:
             previewMessage = message.isEmpty ? "on" : message
         case .slider:
-            previewMessage = "\(Int((minValue + maxValue) / 2))"
-        default:
+            // For slider, handle the property name format correctly
+            if !message.isEmpty && !message.contains("{") {
+                // If message is a property name, we'll use a middle value
+                previewMessage = message
+            } else {
+                // Otherwise use a raw value
+                previewMessage = "\(Int((minValue + maxValue) / 2))"
+            }
+        case .dataDisplay:
             previewMessage = ""
         }
         
@@ -306,15 +492,34 @@ struct ModuleSelect: View {
         }
     }
     
-    private func saveModule() {
-        if useDataPoint, let dataPoint = selectedDataPoint {
-            selectedTopic = dataPoint.path
-        } else if useCustomTopic {
-            selectedTopic = customTopicInput
+    private func prepareAndSave() {
+        // Collect debug info before saving
+        print("Saving module: \(moduleType.rawValue)")
+        print("Selected topic: \(selectedTopic)")
+        print("Use data point: \(useDataPoint)")
+        if let dataPoint = selectedDataPoint {
+            print("Selected data point: \(dataPoint.name)")
         }
         
-        customColor = selectedColor.toHex()
+        // Update all necessary values
+        if customColor == nil {
+            customColor = selectedColor.toHex()
+            print("Set custom color to: \(customColor ?? "nil")")
+        }
         
+        if useDataPoint, let dataPoint = selectedDataPoint {
+            selectedTopic = dataPoint.path
+            print("Updated topic to data point path: \(selectedTopic)")
+        } else if useCustomTopic {
+            selectedTopic = customTopicInput
+            print("Updated topic to custom input: \(selectedTopic)")
+        }
+        
+        // Call the onSave closure
         onSave()
+    }
+    
+    private func saveModule() {
+        prepareAndSave()
     }
 }

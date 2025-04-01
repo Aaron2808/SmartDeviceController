@@ -228,6 +228,18 @@ struct CustomColorPickerView: View {
 }
 
 struct ControlHelpers {
+    static let availableIcons = [
+        "lightbulb", "lightbulb.fill",
+        "switch.2", "poweroutlet.type.a",
+        "poweroutlet.type.b", "poweroutlet.type.g",
+        "fan", "fanblades",
+        "slider.horizontal.3", "thermometer",
+        "button.programmable", "power",
+        "wifi", "speaker.wave.2",
+        "display", "bolt.fill",
+        "chart.bar", "gauge"
+    ]
+    
     static func iconForControlType(_ type: ControlType) -> String {
         switch type {
         case .button:
@@ -241,30 +253,40 @@ struct ControlHelpers {
         }
     }
     
-    static func initializeColorValue(customColor: String?, controlType: ControlType) -> Double {
-        if let hexColor = customColor, !hexColor.isEmpty, let color = Color(hex: hexColor) {
-            if let components = UIColor(color).hsbColorComponents {
-                return min(max(components.hue / 0.83, 0), 1)
-            }
-        }
-        
-        switch controlType {
+    static func colorForControlType(_ type: ControlType) -> Color {
+        switch type {
         case .button:
-            return 0.5  // Blue
-        case .toggle:
-            return 0.3  // Green
+            return .blue
         case .slider:
-            return 0.18 // Orange
+            return .orange
+        case .toggle:
+            return .green
         case .dataDisplay:
-            return 0.67 // Purple
+            return .purple
         }
     }
     
-    static let availableIcons = [
-        "button.programmable", "switch.2", "slider.horizontal.3",
-        "thermometer", "chart.bar", "gauge", "dial.min",
-        "lightbulb.fill", "power","sensor.fill"
-    ]
+    static func initializeColorValue(customColor: String?, controlType: ControlType) -> Double {
+        // If we have a custom color, try to convert it to a hue value
+        if let hexString = customColor, !hexString.isEmpty,
+           let color = Color(hex: hexString) {
+            // Extract the hue component (this is simplified)
+            // In a real app, you'd need a more sophisticated approach
+            return 0.5 // Default to middle value
+        }
+        
+        // Otherwise, return a default based on control type
+        switch controlType {
+        case .button:
+            return 0.6  // Blue-ish
+        case .slider:
+            return 0.12 // Orange-ish
+        case .toggle:
+            return 0.3  // Green-ish
+        case .dataDisplay:
+            return 0.8  // Purple-ish
+        }
+    }
 }
 
 extension UIColor {

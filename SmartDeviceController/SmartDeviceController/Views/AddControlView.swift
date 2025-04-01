@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 enum ControlType: String, Codable, CaseIterable {
     case button = "Button"
@@ -26,12 +27,23 @@ struct AddControlView: View {
     @State private var useDataPoint: Bool = false
     
     @State private var showingConfigSheet = false
+    @State private var isSheetPresented = false // Track sheet presentation for better state management
     
     @State private var customColor: String? = nil
     @State private var customIcon: String? = nil
     @State private var customUnit: String? = nil
     @State private var backgroundColor: String? = nil
     @State private var textColor: String? = nil
+    
+    // The device we're configuring
+    private var device: Device? {
+        return DeviceManager.shared.getDevice(withId: deviceId)
+    }
+    
+    // Filter topics based on device's mqtt topic if available
+    private var filteredTopics: [String] {
+        return DeviceManager.shared.getFilteredTopics(for: deviceId, from: mqttBroker.topics.sorted())
+    }
     
     var body: some View {
         NavigationView {
@@ -47,18 +59,40 @@ struct AddControlView: View {
                         .foregroundColor(.secondary)
                         .padding(.horizontal)
                     
+                    // Display device topic info if available
+                    if let device = device, let deviceTopic = device.mqttTopic, !deviceTopic.isEmpty {
+                        HStack {
+                            Image(systemName: "link")
+                                .foregroundColor(.blue)
+                            Text("Filtering topics for: \(deviceTopic)")
+                                .font(.subheadline)
+                                .foregroundColor(.blue)
+                        }
+                        .padding(.horizontal)
+                        .padding(.vertical, 8)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(8)
+                        .padding(.horizontal)
+                    }
+                    
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 140))], spacing: 16) {
                         ForEach(ControlModule.allModules, id: \.name) { module in
                             ModuleCard(module: module, isSelected: selectedModule?.name == module.name)
                                 .onTapGesture {
                                     selectedModule = module
-                                
                                     displayName = module.name
                                     useDataPoint = (module.type == .dataDisplay)
                                     
                                     resetOptions(for: module.type)
                                     
-                                    showingConfigSheet = true
+                                    // Ensure keyboard is dismissed before presenting sheet
+                                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                                    
+                                    // Use this state variable to control when the sheet is presented
+                                    // Add a slight delay to ensure UI is ready
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        isSheetPresented = true
+                                    }
                                 }
                         }
                     }
@@ -71,12 +105,18 @@ struct AddControlView: View {
                     presentationMode.wrappedValue.dismiss()
                 }
             )
-            .sheet(isPresented: $showingConfigSheet) {
+            .fullScreenCover(isPresented: $isSheetPresented, onDismiss: {
+                // Make sure we correctly handle the state when the sheet is dismissed
+                if !showingConfigSheet {
+                    resetSelection()
+                }
+            }) {
                 if let module = selectedModule {
-
+                    // Present as a full screen cover for better keyboard handling
                     ModuleSelect(
                         moduleType: module.type,
-                        topics: mqttBroker.topics.sorted(),
+                        topics: filteredTopics, // Use filtered topics here
+                        deviceId: deviceId,     // Pass the device ID for data point filtering
                         selectedTopic: $selectedTopic,
                         message: $message,
                         minValue: $minValue,
@@ -91,12 +131,18 @@ struct AddControlView: View {
                         textColor: $textColor,
                         onSave: {
                             addControl(module: module)
-                            showingConfigSheet = false
+                            isSheetPresented = false
                         },
                         onCancel: {
-                            showingConfigSheet = false
+                            isSheetPresented = false
                         }
                     )
+                } else {
+                    // Fallback empty view - should never happen
+                    EmptyView()
+                        .onAppear {
+                            isSheetPresented = false
+                        }
                 }
             }
         }
@@ -110,8 +156,9 @@ struct AddControlView: View {
         textColor = nil
     }
     
-    private func addControl(module: ControlModule) {
-        
+    /// Add a control with robust saving logic
+    func addControl(module: ControlModule) {
+        // Determine the topic to use
         let topicToUse: String
         
         if useDataPoint, let dataPoint = selectedDataPoint {
@@ -120,8 +167,17 @@ struct AddControlView: View {
             topicToUse = selectedTopic
         }
         
+        // Make sure color is set
+        if customColor == nil {
+            customColor = selectedColor()?.toHex()
+        }
+        
+        // Generate a unique ID
+        let controlId = UUID().hashValue
+        
+        // Create the new control
         let newControl = DeviceControl(
-            id: UUID().hashValue,
+            id: controlId,
             topic: topicToUse,
             message: message,
             controlType: module.type,
@@ -136,9 +192,16 @@ struct AddControlView: View {
             textColor: textColor
         )
         
+        // Add to controls collection
         controls.append(newControl)
+        
+        // Save changes
         saveControls()
+        
+        // Dismiss the view
         presentationMode.wrappedValue.dismiss()
+        
+        // Reset selection
         resetSelection()
     }
     
@@ -158,40 +221,27 @@ struct AddControlView: View {
         backgroundColor = nil
         textColor = nil
     }
+    
+    /// Helper to get the selected color
+    func selectedColor() -> Color? {
+        // Get the color for the selected module
+        if let module = selectedModule {
+            return module.color
+        }
+        return nil
+    }
 }
 
-struct ModuleCard: View {
-    let module: ControlModule
-    let isSelected: Bool
-    
-    var body: some View {
-        VStack {
-            module.icon
-                .font(.system(size: 36))
-                .foregroundColor(module.color)
-                .frame(height: 60)
-                .padding(.top)
-            
-            Text(module.name)
-                .font(.headline)
-                .multilineTextAlignment(.center)
-            
-            Text(module.description)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 8)
-                .padding(.bottom, 8)
-        }
-        .frame(maxWidth: .infinity, minHeight: 180)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.secondarySystemBackground))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(isSelected ? module.color : Color.clear, lineWidth: 3)
-                )
+struct AddControlView_Previews: PreviewProvider {
+    static var previews: some View {
+        // Create a state object to hold the controls array for the preview
+        @State var previewControls: [DeviceControl] = []
+        
+        // Return the AddControlView with necessary parameters
+        return AddControlView(
+            controls: .constant([]), // Use a constant binding for the preview
+            deviceId: 1,  // Use a sample device ID
+            saveControls: { /* Preview doesn't need to save */ }
         )
-        .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
     }
 }

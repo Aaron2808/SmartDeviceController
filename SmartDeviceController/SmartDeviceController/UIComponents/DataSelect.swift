@@ -268,6 +268,8 @@ struct DataSelect: View {
     }
 }
 
+import SwiftUI
+
 struct DataPointSelectorSheet: View {
     @ObservedObject var mqttBroker: MQTTBroker
     @Binding var selectedDataPoint: MQTTBroker.DataPoint?
@@ -276,6 +278,9 @@ struct DataPointSelectorSheet: View {
     @State private var searchText: String = ""
     @State private var selectedDevice: String? = nil
     @State private var filteredPoints: [MQTTBroker.DataPoint] = []
+    
+    // Optional device ID to filter data points
+    var deviceId: Int? = nil
     
     var devices: [String] {
         mqttBroker.getAllDevices()
@@ -420,9 +425,30 @@ struct DataPointSelectorSheet: View {
     }
     
     private func filterDataPoints() {
-        filteredPoints = mqttBroker.searchDataPoints(
+        // First determine if we should filter based on a device
+        var deviceTopicPrefix: String? = nil
+        
+        if let deviceId = deviceId {
+            // If we have a device ID, get the device's topic prefix
+            if let device = DeviceManager.shared.getDevice(withId: deviceId),
+               let mqttTopic = device.mqttTopic, !mqttTopic.isEmpty {
+                deviceTopicPrefix = mqttTopic
+            }
+        }
+        
+        // Now filter data points
+        let allPoints = mqttBroker.searchDataPoints(
             query: searchText,
             deviceId: selectedDevice
         )
+        
+        if let prefix = deviceTopicPrefix {
+            // Filter by device topic prefix if available
+            filteredPoints = allPoints.filter { dataPoint in
+                dataPoint.path.hasPrefix(prefix)
+            }
+        } else {
+            filteredPoints = allPoints
+        }
     }
 }

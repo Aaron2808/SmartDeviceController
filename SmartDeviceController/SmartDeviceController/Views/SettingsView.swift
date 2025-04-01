@@ -1,10 +1,17 @@
 import SwiftUI
+import UserNotifications
 
 struct SettingsView: View {
     @ObservedObject private var mqttBroker = MQTTBroker.shared
     @State private var connectionStatus = "Not Connected"
     @State private var isConnected = false
     @State private var connectionTimer: Timer?
+    
+    // Notification settings
+    @State private var notificationsEnabled = false
+    @State private var automationAlerts = true
+    @State private var timerAlerts = true
+    @State private var isSavingNotificationSettings = false
     
     func updateConnectionStatus() {
         connectionStatus = isConnected ? "Connected" : "Not Connected"
@@ -38,6 +45,28 @@ struct SettingsView: View {
                         Text("Port:").bold()
                         Spacer()
                         Text("\(mqttBroker.port)").foregroundColor(.gray)
+                    }
+                }
+                
+                Section(header: Text("Notifications")) {
+                    Toggle("Enable Notifications", isOn: $notificationsEnabled)
+                        .onChange(of: notificationsEnabled) { oldValue, newValue in
+                            if newValue {
+                                // Request permission when enabling
+                                requestNotificationPermission()
+                            }
+                        }
+                    
+                    if notificationsEnabled {
+                        Toggle("Automation Alerts", isOn: $automationAlerts)
+                            .onChange(of: automationAlerts) { _, _ in
+                                saveNotificationSettings()
+                            }
+                        
+                        Toggle("Timer Notifications", isOn: $timerAlerts)
+                            .onChange(of: timerAlerts) { _, _ in
+                                saveNotificationSettings()
+                            }
                     }
                 }
                 
@@ -80,17 +109,23 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
-            
-            
         }
         .onAppear {
             isConnected = mqttBroker.isConnected
             updateConnectionStatus()
             setupConnectionStatusUpdater()
+            checkNotificationStatus()
+            loadNotificationSettings()
         }
         .onDisappear {
             connectionTimer?.invalidate()
             connectionTimer = nil
+            saveNotificationSettings()
+        }
+        .alert("Notification Settings", isPresented: $isSavingNotificationSettings) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Please enable notifications in the system settings to receive updates from your devices.")
         }
     }
     
@@ -109,8 +144,45 @@ struct SettingsView: View {
             RunLoop.current.add(timer, forMode: .common)
         }
     }
+    
+    private func checkNotificationStatus() {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            DispatchQueue.main.async {
+                notificationsEnabled = (settings.authorizationStatus == .authorized)
+            }
+        }
+    }
+    
+    private func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            DispatchQueue.main.async {
+                if granted {
+                    notificationsEnabled = true
+                    // Set up notification categories
+                    NotificationHandler.shared.setupNotificationCategories()
+                } else {
+                    notificationsEnabled = false
+                    isSavingNotificationSettings = true
+                }
+            }
+        }
+    }
+    
+    private func loadNotificationSettings() {
+        automationAlerts = UserDefaults.standard.bool(forKey: "automationAlertsEnabled")
+        timerAlerts = UserDefaults.standard.bool(forKey: "timerAlertsEnabled")
+    }
+    
+    private func saveNotificationSettings() {
+        UserDefaults.standard.set(automationAlerts, forKey: "automationAlertsEnabled")
+        UserDefaults.standard.set(timerAlerts, forKey: "timerAlertsEnabled")
+    }
 }
 
-#Preview {
-    SettingsView()
+struct SettingsView_Previews: PreviewProvider {
+    static var previews: some View {
+        NavigationView {
+            SettingsView()
+        }
+    }
 }

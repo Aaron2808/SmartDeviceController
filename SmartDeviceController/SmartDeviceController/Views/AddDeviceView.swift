@@ -9,6 +9,12 @@ struct AddDeviceView: View {
     @State private var showingCustomLocation: Bool = false
     @State private var colorValue: Double = 0.5
     @State private var selectedSymbol: String = "lightbulb.fill"
+    @State private var deviceTopic: String = ""
+    @State private var showDeviceTopicPicker: Bool = false
+    @State private var customDeviceTopic: String = ""
+    @State private var showIconPicker: Bool = false
+    
+    @ObservedObject private var mqttBroker = MQTTBroker.shared
     
     var onAdd: (Device) -> Void
     
@@ -19,12 +25,27 @@ struct AddDeviceView: View {
         Color(hue: colorValue * 0.83, saturation: 1, brightness: 1)
     }
     
+    var availableTopics: [String] {
+        // Get unique root topics (first part of topic path)
+        let rootTopics = mqttBroker.topics.compactMap { topic -> String? in
+            let components = topic.split(separator: "/")
+            if components.count > 0 {
+                return String(components[0])
+            }
+            return nil
+        }
+        
+        return Array(Set(rootTopics)).sorted()
+    }
+    
     let symbolCategories = [
-        ("Lights & Power", ["lightbulb.fill", "light.max", "powerplug.fill", "bolt.fill"]),
+        ("Lights & Power", ["lightbulb.fill", "light.max", "powerplug.fill", "bolt.fill", "lamp.desk.fill", "lightswitch.on.fill"]),
         
-        ("Appliances", ["fanblades.fill","desktopcomputer", "speaker.wave.2.fill"]),
+        ("Climate & Sensors", ["thermometer.sun.fill", "humidity.fill", "aqi.medium", "sensor.fill", "snowflake", "wind"]),
         
-        ("Home & Sensors", ["wifi", "house.fill", "thermometer"])
+        ("Appliances", ["fanblades.fill", "tv.fill", "speaker.wave.2.fill", "refrigerator.fill", "washer.fill", "oven.fill"]),
+        
+        ("Security & Safety", ["lock.fill", "camera.fill", "shield.fill", "doorbell.fill", "smoke.fill", "water.waves"])
     ]
     
     var body: some View {
@@ -75,12 +96,53 @@ struct AddDeviceView: View {
                     }
                 }
                 
+                // MQTT Topic Section
+                Section(header: Text("MQTT Topic")) {
+                    if availableTopics.isEmpty {
+                        Text("No MQTT topics available. Connect to your broker first.")
+                            .foregroundColor(.secondary)
+                            .italic()
+                    } else {
+                        Toggle("Use Custom Topic", isOn: $showDeviceTopicPicker)
+                            .onChange(of: showDeviceTopicPicker) { _, newValue in
+                                if !newValue {
+                                    customDeviceTopic = ""
+                                }
+                            }
+                        
+                        if showDeviceTopicPicker {
+                            TextField("Custom Topic", text: $customDeviceTopic)
+                                .autocapitalization(.none)
+                                .disableAutocorrection(true)
+                                .onChange(of: customDeviceTopic) { _, _ in
+                                    deviceTopic = customDeviceTopic
+                                }
+                        } else {
+                            Picker("Select Base Topic", selection: $deviceTopic) {
+                                Text("None").tag("")
+                                ForEach(availableTopics, id: \.self) { topic in
+                                    Text(topic).tag(topic)
+                                }
+                            }
+                            .pickerStyle(MenuPickerStyle())
+                        }
+                        
+                        if !deviceTopic.isEmpty {
+                            Text("Example: \(deviceTopic)/light, \(deviceTopic)/switch")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                
+                
                 Section(header: Text("Choose an Icon")) {
                     VStack(alignment: .center, spacing: 16) {
+                        // Selected icon display
                         Image(systemName: selectedSymbol)
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 50, height: 50)
+                            .frame(width: 40, height: 40)
                             .foregroundColor(selectedColor)
                             .padding(12)
                             .background(
@@ -92,32 +154,48 @@ struct AddDeviceView: View {
                                     )
                             )
                             .padding(.vertical, 10)
-                                                
-                        ForEach(symbolCategories, id: \.0) { category, symbols in
-                            VStack(alignment: .leading) {
-                                Text(category)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .padding(.leading, 4)
-                                    .padding(.top, 8)
-                                
-                                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 6), spacing: 8) {
-                                    ForEach(symbols, id: \.self) { symbol in
-                                        Button(action: {
-                                            selectedSymbol = symbol
-                                        }) {
-                                            Image(systemName: symbol)
-                                                .resizable()
-                                                .scaledToFit()
-                                                .frame(width: 22, height: 22)
-                                                .padding(8)
-                                                .foregroundColor(selectedSymbol == symbol ? selectedColor : .primary)
-                                                .background(
-                                                    RoundedRectangle(cornerRadius: 8)
-                                                        .fill(selectedSymbol == symbol ? selectedColor.opacity(0.15) : Color.gray.opacity(0.05))
-                                                )
+                        
+                        // Icon chooser button
+                        Button(action: {
+                            showIconPicker.toggle()
+                        }) {
+                            HStack {
+                                Text("Choose Icon")
+                                    .fontWeight(.medium)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(10)
+                        }
+                        
+                        if showIconPicker {
+                            ForEach(symbolCategories, id: \.0) { category, symbols in
+                                VStack(alignment: .leading) {
+                                    Text(category)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .padding(.leading, 4)
+                                        .padding(.top, 8)
+                                    
+                                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 6), spacing: 8) {
+                                        ForEach(symbols, id: \.self) { symbol in
+                                            Button(action: {
+                                                selectedSymbol = symbol
+                                            }) {
+                                                Image(systemName: symbol)
+                                                    .resizable()
+                                                    .scaledToFit()
+                                                    .frame(width: 22, height: 22)
+                                                    .padding(8)
+                                                    .foregroundColor(selectedSymbol == symbol ? selectedColor : .primary)
+                                                    .background(
+                                                        RoundedRectangle(cornerRadius: 8)
+                                                            .fill(selectedSymbol == symbol ? selectedColor.opacity(0.15) : Color.gray.opacity(0.05))
+                                                    )
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
                                         }
-                                        .buttonStyle(PlainButtonStyle())
                                     }
                                 }
                             }
@@ -129,13 +207,13 @@ struct AddDeviceView: View {
                 Section(header: Text("Choose a Color")) {
                     GeometryReader { geometry in
                         ZStack(alignment: .leading) {
-                        
+                            
                             let sliderWidth = max(50, geometry.size.width)
                             let circleSize: CGFloat = 28
                             let trackHeight: CGFloat = 20
                             let offsetRange = sliderWidth - circleSize
                             
-                        
+                            
                             RoundedRectangle(cornerRadius: trackHeight / 2)
                                 .fill(LinearGradient(
                                     gradient: Gradient(colors: [
@@ -146,7 +224,7 @@ struct AddDeviceView: View {
                                 ))
                                 .frame(height: trackHeight)
                             
-                           
+                            
                             Circle()
                                 .fill(selectedColor)
                                 .frame(width: circleSize, height: circleSize)
@@ -168,16 +246,19 @@ struct AddDeviceView: View {
                     .frame(height: 50)
                     .padding(.vertical, 8)
                 }
-            
+                
                 
                 Section {
                     Button(action: {
+                        let finalTopic = showDeviceTopicPicker ? customDeviceTopic : deviceTopic
+                        
                         let newDevice = Device(
                             id: Int.random(in: 1000...9999),
                             name: deviceName,
                             location: deviceLocation,
                             color: selectedColor,
-                            image: selectedSymbol
+                            image: selectedSymbol,
+                            mqttTopic: finalTopic.isEmpty ? nil : finalTopic
                         )
                         onAdd(newDevice)
                         dismiss()
@@ -216,7 +297,7 @@ struct AddDeviceView: View {
         
         var combinedLocations = Set(defaultLocations)
         combinedLocations.formUnion(savedLocations)
-
+        
         return Array(combinedLocations).sorted()
     }
     

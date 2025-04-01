@@ -1,0 +1,54 @@
+//
+//  to.swift
+//  SmartDeviceController
+//
+//  Created by Aaron Flynn on 22/03/2025.
+//
+
+
+import Foundation
+
+/// Utility class to handle toggle message formatting and parsing
+class ToggleUtils {
+    
+    /// Get the ON and OFF messages for a toggle control
+    /// - Parameter configString: The configuration string in format "on|off"
+    /// - Returns: A tuple with the on message and off message
+    static func getToggleMessages(from configString: String) -> (onMessage: String, offMessage: String) {
+        if configString.contains("|") {
+            let parts = configString.split(separator: "|", maxSplits: 1).map { String($0) }
+            
+            let onMessage = parts[0].isEmpty ? "on" : parts[0]
+            
+            let offMessage = parts.count > 1 ?
+                (parts[1].isEmpty ? "off" : parts[1]) :
+                "off"
+            
+            return (onMessage, offMessage)
+        }
+        
+        return (configString.isEmpty ? "on" : configString, "off")
+    }
+    
+    /// Get just the ON message for a toggle control
+    /// - Parameter configString: The configuration string in format "on|off"
+    /// - Returns: The ON message
+    static func getToggleOnMessage(from configString: String) -> String {
+        if configString.contains("|") {
+            let parts = configString.split(separator: "|", maxSplits: 1)
+            return String(parts[0])
+        }
+        return configString.isEmpty ? "on" : configString
+    }
+    
+    /// Get just the OFF message for a toggle control
+    /// - Parameter configString: The configuration string in format "on|off"
+    /// - Returns: The OFF message
+    static func getToggleOffMessage(from configString: String) -> String {
+        if configString.contains("|") {
+            let parts = configString.split(separator: "|", maxSplits: 1)
+            return parts.count > 1 ? String(parts[1]) : "off"
+        }
+        return "off"
+    }
+}

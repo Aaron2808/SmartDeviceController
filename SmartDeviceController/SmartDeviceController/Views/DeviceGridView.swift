@@ -7,15 +7,12 @@ struct DeviceGridView: View {
     @State private var isConnecting = false
     @State private var showSideMenu = false
     @State private var showEnergyCostView = false
+    @State private var showAllAutomations = false
     
     @ObservedObject private var mqttBroker = MQTTBroker.shared
+    @ObservedObject private var automationManager = AutomationManager.shared
     
-    @State private var devices: [Device] = [
-        Device(id: 3, name: "Smart Plug", location: "Kitchen", color: .red, image: "poweroutlet.type.g"),
-        Device(id: 1, name: "Smart Light", location: "Kitchen", color: .blue, image: "lightbulb"),
-        Device(id: 2, name: "Thermostat", location: "Living Room", color: .yellow, image: "thermometer"),
-        Device(id: 4, name: "Humidity Sensor", location: "Hall" ,color: .orange, image: "humidifier")
-    ]
+    @State private var devices: [Device] = []
     
     let columns = [
         GridItem(.flexible(), spacing: 10),
@@ -68,9 +65,6 @@ struct DeviceGridView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: 40)
                     
-                    connectionStatusView
-                        .padding(.horizontal)
-                        .padding(.top, 4)
                     
                     VStack {
                         if(!devices.isEmpty){
@@ -78,7 +72,18 @@ struct DeviceGridView: View {
                                 LazyVGrid(columns: columns, spacing: 20) {
                                     ForEach(devices) { device in
                                         NavigationLink(destination: DeviceControlView(device: device)) {
-                                            DeviceCard(device: device)
+                                            VStack {
+                                                DeviceCard(device: device)
+                                                // Show MQTT topic if available
+                                                if let topic = device.mqttTopic, !topic.isEmpty {
+                                                    Text(topic)
+                                                        .font(.caption)
+                                                        .foregroundColor(.secondary)
+                                                        .lineLimit(1)
+                                                        .truncationMode(.middle)
+                                                        .frame(maxWidth: 140)
+                                                }
+                                            }
                                         }
                                         .contextMenu {
                                             Button(role: .destructive) {
@@ -120,6 +125,7 @@ struct DeviceGridView: View {
                             .sheet(isPresented: $showAddDeviceForm) {
                                 AddDeviceView { newDevice in
                                     devices.append(newDevice)
+                                    DeviceManager.shared.saveDevices(devices)
                                 }
                             }
                         }.frame(maxWidth: .infinity, maxHeight: 70)
@@ -128,61 +134,143 @@ struct DeviceGridView: View {
                 .navigationDestination(isPresented: $showEnergyCostView) {
                     EnergyCostView()
                 }
+                .navigationDestination(isPresented: $showAllAutomations) {
+                    AllAutomationsView()
+                }
             }
             .onAppear {
-                ensureConnected()
+                mqttBroker.autoConnect()
+                
+                if automationManager.isProcessingEnabled {
+                    automationManager.startMonitoring()
+                }
+                
+                loadDevices()
             }
             
-            // Side menu overlay
-            SideMenuView(isShowing: $showSideMenu, showEnergyCostView: $showEnergyCostView)
+            SideMenuView(isShowing: $showSideMenu,
+                         showEnergyCostView: $showEnergyCostView)
                 .opacity(showSideMenu ? 1 : 0)
         }
     }
     
     private func deleteDevice(_ device: Device) {
         devices.removeAll { $0.id == device.id }
+        DeviceManager.shared.saveDevices(devices)
     }
     
-    private func ensureConnected() {
-        if !mqttBroker.isConnected {
-            isConnecting = true
-            
-            mqttBroker.autoConnect()
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                self.isConnecting = false
-                
-                if !self.mqttBroker.isConnected {
-                    print("Failed to connect automatically")
-                }
-            }
+    private func loadDevices() {
+        devices = DeviceManager.shared.loadDevices()
+        
+        // If no devices exist yet, create some defaults
+        if devices.isEmpty {
+            devices = [
+                Device(id: 3, name: "Smart Plug", location: "Kitchen", color: .red, image: "poweroutlet.type.g", mqttTopic: nil),
+                Device(id: 1, name: "Smart Light", location: "Kitchen", color: .blue, image: "lightbulb", mqttTopic: nil),
+                Device(id: 2, name: "Thermostat", location: "Living Room", color: .yellow, image: "thermometer", mqttTopic: nil),
+                Device(id: 4, name: "Humidity Sensor", location: "Hall", color: .orange, image: "humidifier", mqttTopic: nil)
+            ]
+            DeviceManager.shared.saveDevices(devices)
         }
-    }
-    
-    var connectionStatusView: some View {
-        Group {
-            if isConnecting {
-                HStack {
-                    ProgressView()
-                }
-                .padding(6)
-                .background(Color.blue.opacity(0.1))
-                .cornerRadius(8)
-            } else if !mqttBroker.isConnected {
-                Button("Connect") {
-                    ensureConnected()
-                }
-                .padding(6)
-                .background(Color.blue)
-                .foregroundColor(.white)
-                .cornerRadius(8)
-            }
-        }
-        .frame(height: isConnecting || !mqttBroker.isConnected ? 36 : 0)
-        .opacity(isConnecting || !mqttBroker.isConnected ? 1 : 0)
-        .animation(.easeInOut(duration: 0.3), value: isConnecting || !mqttBroker.isConnected)
     }
 }
+
+struct SideMenuView: View {
+    @Binding var isShowing: Bool
+    @Binding var showEnergyCostView: Bool
+    @State private var showAllAutomations = false
+    
+    var body: some View {
+        ZStack {
+            // Semi-transparent background
+            if isShowing {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.easeInOut) {
+                            isShowing = false
+                        }
+                    }
+            }
+            
+            // Side menu
+            HStack {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Header
+                    HStack {
+                        Text("Menu")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            withAnimation(.easeInOut) {
+                                isShowing = false
+                            }
+                        }) {
+                            Image(systemName: "xmark")
+                                .foregroundColor(.primary)
+                                .padding(8)
+                                .background(Color.gray.opacity(0.1))
+                                .clipShape(Circle())
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 20)
+                    
+                    Divider()
+                    
+                    // Menu items
+                    VStack(spacing: 0) {
+                        // Devices
+                        Button(action: {
+                            withAnimation(.easeInOut) {
+                                isShowing = false
+                            }
+                        }) {
+                            MenuRow(title: "Devices", icon: "house")
+                        }
+                        
+                        // Energy Cost View
+                        Button(action: {
+                            withAnimation(.easeInOut) {
+                                isShowing = false
+                                showEnergyCostView = true
+                            }
+                        }) {
+                            MenuRow(title: "Energy Costs", icon: "bolt.circle.fill")
+                        }
+                        
+                        // ALL Automations
+                        Button(action: {
+                            withAnimation(.easeInOut) {
+                                isShowing = false
+                                showAllAutomations = true
+                            }
+                        }) {
+                            MenuRow(title: "Automations", icon: "wand.and.stars")
+                        }
+                    }
+                    Spacer()
+                
+                }
+                .frame(width: 280)
+                .background(Color(.systemBackground))
+                .offset(x: isShowing ? 0 : -280)
+                .animation(.easeInOut(duration: 0.3), value: isShowing)
+                
+                Spacer()
+            }
+        }
+        .zIndex(100)
+        .sheet(isPresented: $showAllAutomations) {
+            AllAutomationsView()
+        }
+    }
+}
+
+
 
 #Preview{
     DeviceGridView()

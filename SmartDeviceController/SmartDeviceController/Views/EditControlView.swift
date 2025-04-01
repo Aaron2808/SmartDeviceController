@@ -2,6 +2,7 @@ import SwiftUI
 
 struct EditControlView: View {
     var control: DeviceControl
+    var deviceId: Int // Add deviceId as a parameter
     let onSave: (DeviceControl) -> Void
     let onCancel: () -> Void
     
@@ -26,8 +27,6 @@ struct EditControlView: View {
     
     @State private var showDataPointSelector = false
     @State private var showIconPicker = false
-    @State private var showBackgroundColorPicker = false
-    @State private var showTextColorPicker = false
     
     @State private var colorValue: Double = 0.5
     
@@ -35,19 +34,13 @@ struct EditControlView: View {
         Color(hue: colorValue * 0.83, saturation: 1, brightness: 1)
     }
     
-    var selectedBackgroundColor: Color {
-        backgroundColor != nil ? Color(hex: backgroundColor!) ?? Color(.secondarySystemBackground) : Color(.secondarySystemBackground)
-    }
-    
-    var selectedTextColor: Color {
-        textColor != nil ? Color(hex: textColor!) ?? .primary : .primary
-    }
-    
-    init(control: DeviceControl, onSave: @escaping (DeviceControl) -> Void, onCancel: @escaping () -> Void) {
+    init(control: DeviceControl, deviceId: Int, onSave: @escaping (DeviceControl) -> Void, onCancel: @escaping () -> Void) {
         self.control = control
+        self.deviceId = deviceId
         self.onSave = onSave
         self.onCancel = onCancel
         
+        // Initialize state properties from the control
         _selectedTopic = State(initialValue: control.topic)
         _message = State(initialValue: control.message)
         _minValue = State(initialValue: control.minValue)
@@ -69,9 +62,11 @@ struct EditControlView: View {
     var body: some View {
         NavigationView {
             Form {
+                // Basic Configuration
                 Section(header: Text("Basic Configuration")) {
                     TextField("Display Name", text: $displayName)
                     
+                    // Data Point selection logic
                     if control.controlType == .dataDisplay {
                         DataPointSelectionButton(
                             selectedDataPoint: selectedDataPoint,
@@ -80,7 +75,7 @@ struct EditControlView: View {
                         )
                     } else {
                         Toggle("Use Data Point", isOn: $useDataPoint)
-                            .onChange(of: useDataPoint) { oldValue, newValue in
+                            .onChange(of: useDataPoint) { _, newValue in
                                 if !newValue {
                                     selectedDataPoint = nil
                                 }
@@ -94,7 +89,7 @@ struct EditControlView: View {
                             )
                         } else {
                             Toggle("Enter Custom Topic", isOn: $useCustomTopic)
-                                .onChange(of: useCustomTopic) { oldValue, newValue in
+                                .onChange(of: useCustomTopic) { _, newValue in
                                     if newValue {
                                         customTopicInput = selectedTopic
                                     } else {
@@ -106,7 +101,7 @@ struct EditControlView: View {
                                 TextField("Custom MQTT Topic", text: $customTopicInput)
                                     .autocapitalization(.none)
                                     .disableAutocorrection(true)
-                                    .onChange(of: customTopicInput) { oldValue, newValue in
+                                    .onChange(of: customTopicInput) { _, newValue in
                                         selectedTopic = newValue
                                     }
                             } else {
@@ -122,6 +117,7 @@ struct EditControlView: View {
                     }
                 }
                 
+                // Control Settings
                 Section(header: Text("Control Settings")) {
                     switch control.controlType {
                     case .button:
@@ -182,13 +178,71 @@ struct EditControlView: View {
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                         }
                     case .slider:
-                        HStack {
-                            Text("Min:")
-                            TextField("Min Value", value: $minValue, formatter: NumberFormatter())
-                        }
-                        HStack {
-                            Text("Max:")
-                            TextField("Max Value", value: $maxValue, formatter: NumberFormatter())
+                        VStack(spacing: 12) {
+                            HStack {
+                                Text("Min:")
+                                TextField("Min Value", value: $minValue, formatter: NumberFormatter())
+                            }
+                            
+                            HStack {
+                                Text("Max:")
+                                TextField("Max Value", value: $maxValue, formatter: NumberFormatter())
+                            }
+                            
+                            Divider()
+                            
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("JSON Payload (Optional)")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                HStack {
+                                    Text("Property name:")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    
+                                    TextField("brightness", text: $message)
+                                        .autocapitalization(.none)
+                                        .disableAutocorrection(true)
+                                        .onChange(of: message) { _, newValue in
+                                            // Remove any JSON characters if user starts typing them
+                                            if newValue.contains("{") || newValue.contains("}") || newValue.contains(":") {
+                                                let cleanedText = newValue
+                                                    .replacingOccurrences(of: "{", with: "")
+                                                    .replacingOccurrences(of: "}", with: "")
+                                                    .replacingOccurrences(of: "\"", with: "")
+                                                    .replacingOccurrences(of: ":", with: "")
+                                                message = cleanedText
+                                            }
+                                        }
+                                }
+                                
+                                if !message.isEmpty {
+                                    // Show preview of the formatted payload
+                                    let formattedPayload = "{\"\(message)\": \(Int((minValue + maxValue) / 2))}"
+                                    
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Preview:")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                        
+                                        Text(formattedPayload)
+                                            .font(.system(.caption, design: .monospaced))
+                                            .padding(6)
+                                            .background(Color.blue.opacity(0.1))
+                                            .cornerRadius(4)
+                                    }
+                                    .padding(.top, 8)
+                                    
+                                    Text("The value will be automatically inserted")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    Text("Leave empty to send raw value without JSON formatting")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
                         }
                     case .dataDisplay:
                         if selectedDataPoint == nil && control.dataPointId == nil {
@@ -224,12 +278,13 @@ struct EditControlView: View {
                     }
                 }
                 
+                // Appearance Section
                 Section(header: Text("Appearance")) {
                     Button(action: {
                         showIconPicker = true
                     }) {
                         HStack {
-                            Text("Module Icon").foregroundStyle(.black)
+                            Text("Module Icon").foregroundColor(.primary)
                             Spacer()
                             Image(systemName: customIcon ?? control.getIconName())
                                 .foregroundColor(selectedColor)
@@ -248,11 +303,12 @@ struct EditControlView: View {
                     }
                     
                     ColorSliderView(colorValue: $colorValue, customColor: $customColor)
-                    
                 }
+                
+                // Preview Section
                 Section(header: Text("Preview")) {
                     VStack {
-                        ControlView(
+                        ControlInterfaceView(
                             control: createUpdatedControl(),
                             onAction: { _ in }
                         )
@@ -261,9 +317,10 @@ struct EditControlView: View {
                     }
                 }
                 
+                // Action Buttons
                 Section {
                     Button("Save Changes") {
-                        saveChanges()
+                        directlySaveChanges()
                     }
                     .frame(maxWidth: .infinity)
                     .foregroundColor(.white)
@@ -284,19 +341,27 @@ struct EditControlView: View {
                 .padding()
             }
             .navigationBarTitle("Edit \(control.displayName)", displayMode: .inline)
-            .navigationBarItems(trailing: Button("Save") {
-                saveChanges()
-            })
+            .navigationBarItems(
+                leading: Button("Cancel") {
+                    onCancel()
+                },
+                trailing: Button("Save") {
+                    directlySaveChanges()
+                }
+            )
             .onAppear {
+                // Load data points
                 if let dataPointId = control.dataPointId {
                     let dataPoints = mqttBroker.getAllDataPoints()
                     selectedDataPoint = dataPoints.first(where: { $0.id == dataPointId })
                 }
                 
+                // Set up custom topic input
                 if !useDataPoint {
                     customTopicInput = selectedTopic
                 }
                 
+                // Ensure color is set
                 if customColor == nil {
                     customColor = selectedColor.toHex()
                 }
@@ -309,11 +374,27 @@ struct EditControlView: View {
             }
         }
     }
-
+    
+    // Create a new control with the updated values
     private func createUpdatedControl() -> DeviceControl {
+        // Make sure topic is set correctly if using custom topic
+        let topicToUse: String
+        if useDataPoint, let dataPoint = selectedDataPoint {
+            topicToUse = dataPoint.path
+        } else if useCustomTopic {
+            topicToUse = customTopicInput
+        } else {
+            topicToUse = selectedTopic
+        }
+        
+        // Make sure color is set
+        if customColor == nil {
+            customColor = selectedColor.toHex()
+        }
+        
         return DeviceControl(
             id: control.id,
-            topic: selectedTopic,
+            topic: topicToUse,
             message: message,
             controlType: control.controlType,
             displayName: displayName,
@@ -328,31 +409,39 @@ struct EditControlView: View {
         )
     }
     
-    private func shouldDisableSave() -> Bool {
-            if control.controlType == .dataDisplay {
-                if useDataPoint {
-                    return selectedDataPoint == nil
-                }
-                return selectedTopic.isEmpty
-            }
-            
-            if useDataPoint {
-                return selectedDataPoint == nil
-            }
-            return selectedTopic.isEmpty
+    // The most direct approach - save directly to UserDefaults
+    private func directlySaveChanges() {
+        // Create the updated control
+        let updatedControl = createUpdatedControl()
+        
+        // Load current controls array directly from UserDefaults to avoid inconsistencies
+        let key = "controls_\(deviceId)"
+        var currentControls: [DeviceControl] = []
+        
+        if let savedData = UserDefaults.standard.data(forKey: key),
+           let decoded = try? JSONDecoder().decode([DeviceControl].self, from: savedData) {
+            currentControls = decoded
         }
         
-        private func saveChanges() {
-            if useDataPoint, let dataPoint = selectedDataPoint {
-                selectedTopic = dataPoint.path
-            } else if useCustomTopic {
-                selectedTopic = customTopicInput
+        // Find and update the control
+        if let index = currentControls.firstIndex(where: { $0.id == control.id }) {
+            // Replace with the updated control
+            currentControls[index] = updatedControl
+            
+            // Save directly to UserDefaults with synchronize to ensure immediate write
+            if let encoded = try? JSONEncoder().encode(currentControls) {
+                UserDefaults.standard.set(encoded, forKey: key)
+                UserDefaults.standard.synchronize()
+                print("Successfully saved control to UserDefaults")
             }
-            
-            customColor = selectedColor.toHex()
-            
-            let updatedControl = createUpdatedControl()
-            
-            onSave(updatedControl)
+        } else {
+            print("ERROR: Could not find control with ID \(control.id) in current controls array")
         }
+        
+        // Also call the onSave callback to update the UI state
+        onSave(updatedControl)
+        
+        // Dismiss the view
+        presentationMode.wrappedValue.dismiss()
+    }
 }
