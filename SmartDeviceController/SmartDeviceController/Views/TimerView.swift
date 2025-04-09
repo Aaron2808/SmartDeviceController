@@ -7,7 +7,7 @@ struct TimerConfiguratorView: View {
     @ObservedObject private var timerManager = TimerControlManager.shared
     
     @State private var selectedTimerType: TimerAction.TimerType = .turnOn
-    @State private var scheduledDate = Date().addingTimeInterval(3600) // 1 hour from now
+    @State private var scheduledDate = Date().addingTimeInterval(3600)
     @State private var actionValue: String = ""
     @State private var isRepeating: Bool = false
     @State private var showingDeleteAlert = false
@@ -78,7 +78,6 @@ struct TimerConfiguratorView: View {
                                     .cornerRadius(8)
                             }
                             
-                            // Slider to aid in setting the value
                             if let doubleValue = Double(actionValue) {
                                 Slider(value: Binding(
                                     get: { doubleValue },
@@ -247,16 +246,13 @@ struct TimerConfiguratorView: View {
             isRepeating: isRepeating
         )
         
-        // Provide haptic feedback
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
         
-        // Reset form for the next timer
         if control.controlType == .slider && selectedTimerType == .setValue {
             actionValue = ""
         }
         
-        // Move the scheduled time forward by 1 hour for convenience
         scheduledDate = Date().addingTimeInterval(3600)
     }
     
@@ -333,7 +329,6 @@ struct TimerActionRow: View {
             Spacer()
             
             VStack(alignment: .trailing, spacing: 4) {
-                // For setValue timers, show the value
                 if !timer.actionValue.isEmpty && timer.timerType == .setValue {
                     Text(timer.actionValue)
                         .font(.system(.body, design: .rounded))
@@ -344,7 +339,6 @@ struct TimerActionRow: View {
                         .cornerRadius(8)
                 }
                 
-                // Show time remaining
                 Text(timeRemainingText)
                     .font(.caption)
                     .padding(.horizontal, 6)
@@ -378,7 +372,6 @@ struct TimerActionRow: View {
     }
 }
 
-// Add this to show a summary of all timers for a device
 struct TimerSummaryView: View {
     let deviceId: Int
     @ObservedObject private var timerManager = TimerControlManager.shared
@@ -399,7 +392,6 @@ struct TimerSummaryView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Filter and sort controls
                 HStack {
                     Picker("Filter", selection: $filterOption) {
                         Text("All").tag(TimerFilterOption.all)
@@ -427,7 +419,6 @@ struct TimerSummaryView: View {
                 .padding()
                 .background(Color(.secondarySystemBackground))
                 
-                // Timer list
                 List {
                     let timers = getFilteredAndSortedTimers()
                     
@@ -437,7 +428,6 @@ struct TimerSummaryView: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, 8)
                     } else {
-                        // Group timers by date if sorting by time
                         if sortOption == .time {
                             let grouped = Dictionary(grouping: timers) { timer -> String in
                                 let date = timer.scheduledTime
@@ -478,7 +468,6 @@ struct TimerSummaryView: View {
                                 }
                             }
                         } else {
-                            // Group timers by type if sorting by type
                             let grouped = Dictionary(grouping: timers) { timer -> String in
                                 return timer.timerType.rawValue
                             }
@@ -532,7 +521,6 @@ struct TimerSummaryView: View {
     private func getFilteredAndSortedTimers() -> [TimerAction] {
         let timers = timerManager.getTimerActions(forDevice: deviceId)
         
-        // Apply filter
         let filtered = timers.filter { timer in
             switch filterOption {
             case .all:
@@ -544,7 +532,6 @@ struct TimerSummaryView: View {
             }
         }
         
-        // Apply sort
         return filtered.sorted { first, second in
             switch sortOption {
             case .time:

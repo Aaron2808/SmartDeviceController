@@ -3,11 +3,9 @@ import SwiftUI
 import os.log
 
 class MQTTBroker: ObservableObject {
-    // MARK: - Static Properties
     
     static let shared = MQTTBroker()
     
-    // MARK: - Constants
     
     private enum Constants {
         static let refreshInterval: TimeInterval = 30.0
@@ -15,7 +13,6 @@ class MQTTBroker: ObservableObject {
         static let connectionWaitTime: TimeInterval = 2.0
     }
     
-    // MARK: - Properties
     
     public var mqtt: CocoaMQTT?
     private var mqttConfig: MQTTConfig
@@ -32,7 +29,6 @@ class MQTTBroker: ObservableObject {
     @Published var deviceContexts: [String: DeviceContext] = [:]
     @Published var isConnected: Bool = false
     
-    // MARK: - Initialization
     
     private init() {
         clientID = "iOS_Client_\(UUID().uuidString)"
@@ -56,9 +52,6 @@ class MQTTBroker: ObservableObject {
         mqtt?.delegate = self
     }
     
-    // MARK: - MQTT Connection Methods
-    
-    /// Connect to the MQTT broker
     func connect() {
         guard let mqtt = mqtt else {
             logger.error("MQTT client not initialized")
@@ -76,7 +69,6 @@ class MQTTBroker: ObservableObject {
         }
     }
     
-    /// Disconnect from the MQTT broker
     func disconnect() {
         guard let mqtt = mqtt else {
             logger.error("MQTT client not initialized")
@@ -86,12 +78,10 @@ class MQTTBroker: ObservableObject {
         mqtt.disconnect()
         isConnected = false
         
-        // Cancel refresh timer
         refreshTimer?.invalidate()
         refreshTimer = nil
     }
     
-    /// Subscribe to all MQTT topics
     func searchTopics() {
         guard let mqtt = mqtt else {
             logger.error("MQTT client not initialized")
@@ -102,10 +92,7 @@ class MQTTBroker: ObservableObject {
         mqtt.subscribe("#")
     }
     
-    /// Publish a message to a topic
-    /// - Parameters:
-    ///   - topic: The topic to publish to
-    ///   - message: The message to publish
+    
     func publish(topic: String, message: String) {
         guard let mqtt = mqtt else {
             logger.error("MQTT client not initialized")
@@ -116,8 +103,7 @@ class MQTTBroker: ObservableObject {
         logger.debug("Published message to topic \(topic): \(message)")
     }
     
-    /// Subscribe to a specific topic
-    /// - Parameter topic: The topic to subscribe to
+    
     func subscribe(topic: String) {
         guard let mqtt = mqtt else {
             logger.error("MQTT client not initialized")
@@ -128,7 +114,6 @@ class MQTTBroker: ObservableObject {
         logger.info("Subscribed to topic: \(topic)")
     }
     
-    /// Attempt to automatically connect to the MQTT broker
     func autoConnect() {
         logger.info("Starting MQTT auto-connection process")
         
@@ -182,10 +167,8 @@ class MQTTBroker: ObservableObject {
     }
     
     private func setupPeriodicTopicRefresh() {
-        // Cancel existing timer if any
         refreshTimer?.invalidate()
         
-        // Create new timer
         refreshTimer = Timer.scheduledTimer(withTimeInterval: Constants.refreshInterval, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             
@@ -203,25 +186,17 @@ class MQTTBroker: ObservableObject {
         }
     }
     
-    // MARK: - Data Value Methods
     
-    /// Get a data value for a specific topic
-    /// - Parameter topic: The topic to get the value for
-    /// - Returns: The data value, or nil if not found
     func getValue(topic: String) -> DataValue? {
         return topicData[topic]
     }
     
-    /// Get a data value for a data point
-    /// - Parameter dataPoint: The data point to get the value for
-    /// - Returns: The data value, or nil if not found
+  
     func getValue(for dataPoint: DataPoint) -> DataValue? {
         return topicData[dataPoint.path]
     }
     
-    /// Get a data value by path
-    /// - Parameter path: The path to get the value for
-    /// - Returns: The data value, or nil if not found
+    
     func getDataByPath(_ path: String) -> DataValue? {
         if let value = topicData[path] {
             return value
@@ -282,23 +257,17 @@ class MQTTBroker: ObservableObject {
         return nil
     }
     
-    // MARK: - Device and DataPoint Methods
     
-    /// Get all devices
-    /// - Returns: Array of device IDs
     func getAllDevices() -> [String] {
         return Array(deviceContexts.keys).sorted()
     }
     
-    /// Get a data point by ID
-    /// - Parameter dataPointId: The data point ID
-    /// - Returns: The data point, or nil if not found
+    
     func getDataPointById(_ dataPointId: String) -> DataPoint? {
         return getAllDataPoints().first(where: { $0.id == dataPointId })
     }
     
-    /// Get all data points
-    /// - Returns: Array of all data points
+   
     func getAllDataPoints() -> [DataPoint] {
         var allPoints: [DataPoint] = []
         for deviceId in getAllDevices() {
@@ -307,9 +276,7 @@ class MQTTBroker: ObservableObject {
         return allPoints
     }
     
-    /// Get all data points for a specific device
-    /// - Parameter deviceId: The device ID to get data points for
-    /// - Returns: Array of data points
+    
     func getAllDataPoints(deviceId: String? = nil) -> [DataPoint] {
         var results: [DataPoint] = []
         
@@ -341,11 +308,7 @@ class MQTTBroker: ObservableObject {
         return results
     }
     
-    /// Search for data points
-    /// - Parameters:
-    ///   - query: The search query
-    ///   - deviceId: Optional device ID to filter by
-    /// - Returns: Array of matching data points
+   
     func searchDataPoints(query: String, deviceId: String? = nil) -> [DataPoint] {
         let allPoints = getAllDataPoints(deviceId: deviceId)
         
@@ -359,9 +322,7 @@ class MQTTBroker: ObservableObject {
         }
     }
     
-    /// Get formatted value for a data point
-    /// - Parameter dataPoint: The data point
-    /// - Returns: Formatted string representation
+    
     func getFormattedValue(for dataPoint: DataPoint) -> String {
         guard let value = topicData[dataPoint.path] else {
             return "N/A"
@@ -374,7 +335,7 @@ class MQTTBroker: ObservableObject {
         return formattedValue
     }
     
-    // MARK: - Private Helper Methods
+  
     
     private func inferTypeAndUnit(topic: String, value: DataValue) -> (DataType, String?) {
         let lowerTopic = topic.lowercased()
@@ -708,7 +669,6 @@ extension MQTTBroker: CocoaMQTTDelegate {
     }
 }
 
-// MARK: - Data Types
 
 extension MQTTBroker {
     

@@ -2,7 +2,7 @@ import SwiftUI
 
 struct EditControlView: View {
     var control: DeviceControl
-    var deviceId: Int // Add deviceId as a parameter
+    var deviceId: Int
     let onSave: (DeviceControl) -> Void
     let onCancel: () -> Void
     
@@ -40,7 +40,6 @@ struct EditControlView: View {
         self.onSave = onSave
         self.onCancel = onCancel
         
-        // Initialize state properties from the control
         _selectedTopic = State(initialValue: control.topic)
         _message = State(initialValue: control.message)
         _minValue = State(initialValue: control.minValue)
@@ -62,11 +61,9 @@ struct EditControlView: View {
     var body: some View {
         NavigationView {
             Form {
-                // Basic Configuration
                 Section(header: Text("Basic Configuration")) {
                     TextField("Display Name", text: $displayName)
                     
-                    // Data Point selection logic
                     if control.controlType == .dataDisplay {
                         DataPointSelectionButton(
                             selectedDataPoint: selectedDataPoint,
@@ -117,7 +114,6 @@ struct EditControlView: View {
                     }
                 }
                 
-                // Control Settings
                 Section(header: Text("Control Settings")) {
                     switch control.controlType {
                     case .button:
@@ -205,7 +201,6 @@ struct EditControlView: View {
                                         .autocapitalization(.none)
                                         .disableAutocorrection(true)
                                         .onChange(of: message) { _, newValue in
-                                            // Remove any JSON characters if user starts typing them
                                             if newValue.contains("{") || newValue.contains("}") || newValue.contains(":") {
                                                 let cleanedText = newValue
                                                     .replacingOccurrences(of: "{", with: "")
@@ -218,7 +213,6 @@ struct EditControlView: View {
                                 }
                                 
                                 if !message.isEmpty {
-                                    // Show preview of the formatted payload
                                     let formattedPayload = "{\"\(message)\": \(Int((minValue + maxValue) / 2))}"
                                     
                                     VStack(alignment: .leading, spacing: 4) {
@@ -278,7 +272,6 @@ struct EditControlView: View {
                     }
                 }
                 
-                // Appearance Section
                 Section(header: Text("Appearance")) {
                     Button(action: {
                         showIconPicker = true
@@ -305,7 +298,6 @@ struct EditControlView: View {
                     ColorSliderView(colorValue: $colorValue, customColor: $customColor)
                 }
                 
-                // Preview Section
                 Section(header: Text("Preview")) {
                     VStack {
                         ControlInterfaceView(
@@ -317,7 +309,6 @@ struct EditControlView: View {
                     }
                 }
                 
-                // Action Buttons
                 Section {
                     Button("Save Changes") {
                         directlySaveChanges()
@@ -350,18 +341,15 @@ struct EditControlView: View {
                 }
             )
             .onAppear {
-                // Load data points
                 if let dataPointId = control.dataPointId {
                     let dataPoints = mqttBroker.getAllDataPoints()
                     selectedDataPoint = dataPoints.first(where: { $0.id == dataPointId })
                 }
                 
-                // Set up custom topic input
                 if !useDataPoint {
                     customTopicInput = selectedTopic
                 }
                 
-                // Ensure color is set
                 if customColor == nil {
                     customColor = selectedColor.toHex()
                 }
@@ -375,9 +363,7 @@ struct EditControlView: View {
         }
     }
     
-    // Create a new control with the updated values
     private func createUpdatedControl() -> DeviceControl {
-        // Make sure topic is set correctly if using custom topic
         let topicToUse: String
         if useDataPoint, let dataPoint = selectedDataPoint {
             topicToUse = dataPoint.path
@@ -387,7 +373,6 @@ struct EditControlView: View {
             topicToUse = selectedTopic
         }
         
-        // Make sure color is set
         if customColor == nil {
             customColor = selectedColor.toHex()
         }
@@ -409,12 +394,9 @@ struct EditControlView: View {
         )
     }
     
-    // The most direct approach - save directly to UserDefaults
     private func directlySaveChanges() {
-        // Create the updated control
         let updatedControl = createUpdatedControl()
         
-        // Load current controls array directly from UserDefaults to avoid inconsistencies
         let key = "controls_\(deviceId)"
         var currentControls: [DeviceControl] = []
         
@@ -423,12 +405,9 @@ struct EditControlView: View {
             currentControls = decoded
         }
         
-        // Find and update the control
         if let index = currentControls.firstIndex(where: { $0.id == control.id }) {
-            // Replace with the updated control
             currentControls[index] = updatedControl
             
-            // Save directly to UserDefaults with synchronize to ensure immediate write
             if let encoded = try? JSONEncoder().encode(currentControls) {
                 UserDefaults.standard.set(encoded, forKey: key)
                 UserDefaults.standard.synchronize()
@@ -438,10 +417,8 @@ struct EditControlView: View {
             print("ERROR: Could not find control with ID \(control.id) in current controls array")
         }
         
-        // Also call the onSave callback to update the UI state
         onSave(updatedControl)
         
-        // Dismiss the view
         presentationMode.wrappedValue.dismiss()
     }
 }

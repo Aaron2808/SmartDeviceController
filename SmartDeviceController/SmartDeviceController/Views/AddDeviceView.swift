@@ -26,7 +26,6 @@ struct AddDeviceView: View {
     }
     
     var availableTopics: [String] {
-        // Get unique root topics (first part of topic path)
         let rootTopics = mqttBroker.topics.compactMap { topic -> String? in
             let components = topic.split(separator: "/")
             if components.count > 0 {
@@ -96,7 +95,6 @@ struct AddDeviceView: View {
                     }
                 }
                 
-                // MQTT Topic Section
                 Section(header: Text("MQTT Topic")) {
                     if availableTopics.isEmpty {
                         Text("No MQTT topics available. Connect to your broker first.")
@@ -138,7 +136,6 @@ struct AddDeviceView: View {
                 
                 Section(header: Text("Choose an Icon")) {
                     VStack(alignment: .center, spacing: 16) {
-                        // Selected icon display
                         Image(systemName: selectedSymbol)
                             .resizable()
                             .scaledToFit()
@@ -155,7 +152,6 @@ struct AddDeviceView: View {
                             )
                             .padding(.vertical, 10)
                         
-                        // Icon chooser button
                         Button(action: {
                             showIconPicker.toggle()
                         }) {

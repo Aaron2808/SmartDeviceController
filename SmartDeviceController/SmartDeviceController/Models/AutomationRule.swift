@@ -7,8 +7,8 @@
 
 
 import SwiftUI
+import os.log
 
-// Automation Rule Model
 struct AutomationRule: Identifiable, Codable, Equatable {
     let id: String
     let name: String
@@ -22,7 +22,6 @@ struct AutomationRule: Identifiable, Codable, Equatable {
     }
 }
 
-// Condition Model
 struct RuleCondition: Codable, Equatable {
     let sourceDeviceId: Int
     let dataPointId: String
@@ -46,7 +45,6 @@ struct RuleCondition: Codable, Equatable {
     }
 }
 
-// Action Model
 struct RuleAction: Codable, Equatable {
     let targetControlId: Int
     let actionType: ActionType
@@ -64,47 +62,29 @@ struct RuleAction: Codable, Equatable {
     }
 }
 
-// Manager class for handling automations
-import SwiftUI
-import os.log
 
-// Manager class for handling automations
 class AutomationManager: ObservableObject {
-    // MARK: - Shared Instance
     
     static let shared = AutomationManager()
-    
-    // MARK: - Published Properties
-    
     @Published var automationRules: [AutomationRule] = []
     @Published var isProcessingEnabled = true
     
-    // MARK: - Private Properties
     
     private var monitoringTimer: Timer?
-    private let checkInterval: TimeInterval = 5.0 // Check every 5 seconds
+    private let checkInterval: TimeInterval = 5.0
     private let logger = Logger(subsystem: "com.aaronflynn.SmartDeviceController", category: "Automation")
     
-    // MARK: - Initialization
     
     init() {
         loadRules()
         startMonitoring()
     }
     
-    // MARK: - Public Methods
-    
-    /// Add a new automation rule
-    /// - Parameter rule: The rule to add
     func addRule(_ rule: AutomationRule) {
         automationRules.append(rule)
         saveRules()
     }
     
-    /// Update an existing rule's enabled state
-    /// - Parameters:
-    ///   - id: The rule ID to update
-    ///   - isEnabled: The new enabled state
     func updateRule(id: String, isEnabled: Bool) {
         if let index = automationRules.firstIndex(where: { $0.id == id }) {
             let rule = automationRules[index]
@@ -121,23 +101,17 @@ class AutomationManager: ObservableObject {
         }
     }
     
-    /// Remove a rule
-    /// - Parameter id: The rule ID to remove
     func removeRule(id: String) {
         automationRules.removeAll(where: { $0.id == id })
         saveRules()
     }
     
-    /// Get rules for a specific device
-    /// - Parameter deviceId: The device ID
-    /// - Returns: Array of rules for this device
     func getRules(forDevice deviceId: Int) -> [AutomationRule] {
         return automationRules.filter { $0.deviceId == deviceId }
     }
     
-    /// Start monitoring for automation conditions
     func startMonitoring() {
-        stopMonitoring() // Ensure no duplicate timers
+        stopMonitoring()
         
         monitoringTimer = Timer.scheduledTimer(withTimeInterval: checkInterval, repeats: true) { [weak self] _ in
             self?.checkAndProcessRules()
@@ -150,7 +124,6 @@ class AutomationManager: ObservableObject {
         logger.info("Automation monitoring started")
     }
     
-    /// Stop monitoring for automation conditions
     func stopMonitoring() {
         monitoringTimer?.invalidate()
         monitoringTimer = nil
@@ -158,9 +131,6 @@ class AutomationManager: ObservableObject {
         logger.info("Automation monitoring stopped")
     }
     
-    // MARK: - Private Methods
-    
-    /// Process all enabled rules
     private func checkAndProcessRules() {
         guard isProcessingEnabled else { return }
         
@@ -169,30 +139,20 @@ class AutomationManager: ObservableObject {
         }
     }
     
-    /// Evaluate a single rule condition
-    /// - Parameter rule: The rule to evaluate
     private func evaluateRule(_ rule: AutomationRule) {
         let mqttBroker = MQTTBroker.shared
         let condition = rule.condition
         
-        // Get the value from the source data point
         if let dataPoint = mqttBroker.getDataPointById(condition.dataPointId),
            let currentValue = mqttBroker.getValue(for: dataPoint) {
             
-            // Compare the current value with the condition value
             if compareValues(currentValue: currentValue, condition: condition) {
-                // Condition met, execute the action
                 logger.info("Rule '\(rule.name)' condition met, executing action")
                 executeAction(rule.action)
             }
         }
     }
     
-    /// Helper to compare values based on the comparator
-    /// - Parameters:
-    ///   - currentValue: The current value from the MQTT broker
-    ///   - condition: The rule condition
-    /// - Returns: True if the condition is met, false otherwise
     private func compareValues(currentValue: MQTTBroker.DataValue, condition: RuleCondition) -> Bool {
         let conditionValue = condition.value
         
@@ -202,7 +162,7 @@ class AutomationManager: ObservableObject {
                 switch condition.comparator {
                 case .greaterThan: return numValue > targetValue
                 case .lessThan: return numValue < targetValue
-                case .equalTo: return abs(numValue - targetValue) < 0.001 // Use epsilon for floating point comparison
+                case .equalTo: return abs(numValue - targetValue) < 0.001
                 case .notEqualTo: return abs(numValue - targetValue) >= 0.001
                 }
             }
@@ -212,18 +172,17 @@ class AutomationManager: ObservableObject {
             switch condition.comparator {
             case .equalTo: return boolValue == targetBool
             case .notEqualTo: return boolValue != targetBool
-            default: return false // Greater/less than don't apply to booleans
+            default: return false
             }
             
         case .text(let stringValue):
             switch condition.comparator {
-            case .equalTo: return stringValue.lowercased() == conditionValue.lowercased() // Case-insensitive comparison
+            case .equalTo: return stringValue.lowercased() == conditionValue.lowercased()
             case .notEqualTo: return stringValue.lowercased() != conditionValue.lowercased()
-            default: return false // Greater/less than don't make sense for text
+            default: return false
             }
             
         case .jsonObject(let dict):
-            // Try to extract a specific property if condition value contains a path
             if conditionValue.contains(".") {
                 let parts = conditionValue.split(separator: ".")
                 if parts.count == 2 {
@@ -243,16 +202,14 @@ class AutomationManager: ObservableObject {
             return false
             
         default:
-            return false // Other types not supported for comparison
+            return false
         }
         
         return false
     }
     
-    /// Execute the rule action
-    /// - Parameter action: The action to execute
+    
     private func executeAction(_ action: RuleAction) {
-        // Find the control to act on
         let controls = UserDefaultsManager.shared.getAllControlsFlat()
         
         if let control = controls.first(where: { $0.id == action.targetControlId }) {
@@ -288,8 +245,6 @@ class AutomationManager: ObservableObject {
             logger.error("Failed to find control with ID: \(action.targetControlId)")
         }
     }
-    
-    // MARK: - Persistence
     
     private func saveRules() {
         UserDefaultsManager.shared.saveAutomationRules(automationRules)

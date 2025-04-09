@@ -73,7 +73,6 @@ struct ColorSliderView: View {
                                 if sliderWidth > 0 {
                                     let rawValue = value.location.x / sliderWidth
                                     colorValue = min(max(0, rawValue), 1)
-                                    // Always update the custom color when slider moves
                                     customColor = selectedColor.toHex()
                                 }
                             }
@@ -81,13 +80,11 @@ struct ColorSliderView: View {
             }
             .frame(height: 40)
             .onChange(of: colorValue) { _, _ in
-                // Ensure custom color is updated whenever color value changes
                 customColor = selectedColor.toHex()
             }
         }
         .frame(height: 40)
         .onAppear {
-            // Initialize custom color if it's nil or empty
             if customColor == nil || customColor?.isEmpty == true {
                 customColor = selectedColor.toHex()
             }
@@ -267,24 +264,20 @@ struct ControlHelpers {
     }
     
     static func initializeColorValue(customColor: String?, controlType: ControlType) -> Double {
-        // If we have a custom color, try to convert it to a hue value
         if let hexString = customColor, !hexString.isEmpty,
            let color = Color(hex: hexString) {
-            // Extract the hue component (this is simplified)
-            // In a real app, you'd need a more sophisticated approach
-            return 0.5 // Default to middle value
+           return 0.5
         }
         
-        // Otherwise, return a default based on control type
         switch controlType {
         case .button:
-            return 0.6  // Blue-ish
+            return 0.6
         case .slider:
-            return 0.12 // Orange-ish
+            return 0.12
         case .toggle:
-            return 0.3  // Green-ish
+            return 0.3
         case .dataDisplay:
-            return 0.8  // Purple-ish
+            return 0.8  
         }
     }
 }

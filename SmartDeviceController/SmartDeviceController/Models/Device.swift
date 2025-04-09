@@ -6,9 +6,8 @@ struct Device: Identifiable, Codable {
     let location: String
     let color: Color
     let image: String
-    let mqttTopic: String? // New property to store the base MQTT topic
+    let mqttTopic: String?
     
-    // CodingKeys to handle Color coding
     enum CodingKeys: String, CodingKey {
         case id, name, location, image, mqttTopic
         case color
@@ -23,7 +22,6 @@ struct Device: Identifiable, Codable {
         self.mqttTopic = mqttTopic
     }
     
-    // Encoding with special handling for Color
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
@@ -32,13 +30,11 @@ struct Device: Identifiable, Codable {
         try container.encode(image, forKey: .image)
         try container.encode(mqttTopic, forKey: .mqttTopic)
         
-        // Encode color as hex string
         if let hexString = color.toHex() {
             try container.encode(hexString, forKey: .color)
         }
     }
     
-    // Decoding with special handling for Color
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(Int.self, forKey: .id)
@@ -47,7 +43,6 @@ struct Device: Identifiable, Codable {
         image = try container.decode(String.self, forKey: .image)
         mqttTopic = try container.decodeIfPresent(String.self, forKey: .mqttTopic)
         
-        // Decode color from hex string
         let hexString = try container.decode(String.self, forKey: .color)
         color = Color(hex: hexString) ?? .blue
     }
@@ -119,7 +114,6 @@ struct DeviceControl: Codable, Identifiable, Hashable {
             return Color(hex: hexColor) ?? .blue
         }
         
-        // Default colors based on control type
         switch controlType {
         case .button:
             return .blue

@@ -425,25 +425,21 @@ struct DataPointSelectorSheet: View {
     }
     
     private func filterDataPoints() {
-        // First determine if we should filter based on a device
         var deviceTopicPrefix: String? = nil
         
         if let deviceId = deviceId {
-            // If we have a device ID, get the device's topic prefix
             if let device = DeviceManager.shared.getDevice(withId: deviceId),
                let mqttTopic = device.mqttTopic, !mqttTopic.isEmpty {
                 deviceTopicPrefix = mqttTopic
             }
         }
         
-        // Now filter data points
         let allPoints = mqttBroker.searchDataPoints(
             query: searchText,
             deviceId: selectedDevice
         )
         
         if let prefix = deviceTopicPrefix {
-            // Filter by device topic prefix if available
             filteredPoints = allPoints.filter { dataPoint in
                 dataPoint.path.hasPrefix(prefix)
             }

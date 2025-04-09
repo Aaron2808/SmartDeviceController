@@ -12,7 +12,10 @@ struct MotionConfiguratorView: View {
     @State private var showActionSheet = false
     @State private var showActionTypeSheet = false
     @State private var showHelp = false
-    
+    @State private var showMotionTestView = false
+    @State private var showMotionSettings = false
+    @State private var sliderValue: Double = 50
+
     var body: some View {
         NavigationView {
             Form {
@@ -41,120 +44,49 @@ struct MotionConfiguratorView: View {
                 }
                 
                 Section(header: Text("Action")) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        switch control.controlType {
-                        case .button:
-                            TextField("Button Message", text: $actionValue)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                                .onAppear {
-                                    if actionValue.isEmpty {
-                                        actionValue = control.message
-                                    }
-                                }
-        
-                        case .toggle:
-                            let onMessage = getToggleOnMessage(from: control.message)
-                            let offMessage = getToggleOffMessage(from: control.message)
-                            
-                            Picker("Toggle Action", selection: $actionValue) {
-                                Text("Turn ON").tag(onMessage)
-                                Text("Turn OFF").tag(offMessage)
-                                Text("Toggle").tag("toggle")
-                            }
-                            .pickerStyle(SegmentedPickerStyle())
-                            .onAppear {
-                                if actionValue.isEmpty {
-                                    actionValue = "toggle"
-                                }
-                            }
-                            
-                            Text("Choose what happens when the motion is detected.")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(.top, 4)
-                            
-                        case .slider:
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Motion Control:")
-                                    .font(.subheadline)
-                                
-                        
-                                Button(action: {
-                                    actionValue = "motion:enabled"
-                                }) {
-                                    HStack {
-                                        Image(systemName: "gyroscope")
-                                            .foregroundColor(.blue)
-                                        Text("Enable Motion Control")
-                                            .foregroundColor(.blue)
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 8)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .fill(Color.blue.opacity(0.1))
-                                    )
-                                    .padding(.vertical, 4)
-                                }
-                                .onAppear {
-                                    // Default to motion enabled
-                                    actionValue = "motion:enabled"
-                                }
-                                
-                                Text("Motion direction controls slider: twist or tilt left to decrease, right to increase")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .padding(.top, 4)
-                            }
-                            
-                        case .dataDisplay:
-                            Text("Data display controls cannot have motion actions")
-                                .foregroundColor(.secondary)
-                        }
+                    if control.controlType == .button {
+                        buttonActionConfig()
+                    } else if control.controlType == .toggle {
+                        toggleActionConfig()
+                    } else if control.controlType == .slider {
+                        sliderActionConfig()
+                    } else {
+                        Text("Data display controls cannot have motion actions")
+                            .foregroundColor(.secondary)
                     }
                 }
                 
-                Section(header: Text("How to Use")) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        switch selectedMotionType {
-                        case .twist:
-                            Text("Twist your device left or right like turning a steering wheel.")
-                                .font(.callout)
+                if control.controlType == .slider {
+                    Section(header: Text("Preview")) {
+                        VStack(spacing: 12) {
+                            Text("Motion will control the slider:")
+                                .font(.subheadline)
                                 .foregroundColor(.secondary)
                             
-                            if control.controlType == .slider {
-                                Text("• Twist left to decrease value")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                            Slider(value: $sliderValue, in: control.minValue...control.maxValue)
+                                .accentColor(control.getCustomColor())
+                                .disabled(true)
+                            
+                            HStack {
+                                VStack {
+                                    Image(systemName: selectedMotionType == .twist ? "rotate.left" : "iphone.gen3.slash")
+                                        .foregroundColor(.blue)
+                                    Text("Decrease")
+                                        .font(.caption)
+                                }
                                 
-                                Text("• Twist right to increase value")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                        case .tilt:
-                            Text("Tilt your device left or right (side to side).")
-                                .font(.callout)
-                                .foregroundColor(.secondary)
-                            
-                            if control.controlType == .slider {
-                                Text("• Tilt left to decrease value")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                Spacer()
                                 
-                                Text("• Tilt right to increase value")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                VStack {
+                                    Image(systemName: selectedMotionType == .twist ? "rotate.right" : "iphone.gen3")
+                                        .foregroundColor(.blue)
+                                    Text("Increase")
+                                        .font(.caption)
+                                }
                             }
-                            
-                        case .shake:
-                            Text("Shake your device to trigger the action.")
-                                .font(.callout)
-                                .foregroundColor(.secondary)
+                            .padding(.horizontal, 8)
                         }
                     }
-                    .padding(.vertical, 4)
                 }
                 
                 Section {
@@ -191,38 +123,39 @@ struct MotionConfiguratorView: View {
             .navigationBarItems(
                 leading: Button("Cancel") {
                     presentationMode.wrappedValue.dismiss()
-                },
-                trailing: Button(action: {
-                    showHelp = true
-                }) {
-                    Image(systemName: "questionmark.circle")
                 }
             )
             .onAppear(perform: loadExistingAction)
-            .actionSheet(isPresented: $showActionSheet) {
-                var buttons: [ActionSheet.Button] = []
-                
-                // Add buttons for different slider values
-                let valueSteps = 5
-                let valueRange = Int(control.maxValue - control.minValue)
-                let stepSize = valueRange / valueSteps
-                
-                for i in 0...valueSteps {
-                    let value = Int(control.minValue) + (i * stepSize)
-                    buttons.append(.default(Text("\(value)")) {
-                        actionValue = "set:\(value)"
-                    })
-                }
-                
-                buttons.append(.cancel())
-                
-                return ActionSheet(
-                    title: Text("Set Slider Value"),
-                    message: Text("Select a value to set when motion is detected"),
-                    buttons: buttons
-                )
-            }
-            
+        }
+    }
+        
+    private func buttonActionConfig() -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("\(selectedMotionType.rawValue) your device to press the button")
+                .font(.body)
+        }
+        .onAppear {
+            actionValue = control.message
+        }
+    }
+    
+    private func toggleActionConfig() -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("\(selectedMotionType.rawValue) your device to toggle the control")
+                .font(.body)
+        }
+        .onAppear {
+            actionValue = "toggle"
+        }
+    }
+    
+    private func sliderActionConfig() -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("\(selectedMotionType.rawValue) your device to control the slider value")
+                .font(.body)
+        }
+        .onAppear {
+            actionValue = "motion:enabled"
         }
     }
     
@@ -232,13 +165,19 @@ struct MotionConfiguratorView: View {
                 selectedMotionType = motionType
             }
             actionValue = action.actionValue
+        } else {
+            if control.controlType == .button {
+                actionValue = control.message
+            } else if control.controlType == .toggle {
+                actionValue = "toggle"
+            } else if control.controlType == .slider {
+                actionValue = "motion:enabled"
+            }
         }
     }
     
-    
     private func saveMotionAction() {
         if control.controlType == .dataDisplay {
-            // Data display controls cannot have motion actions
             presentationMode.wrappedValue.dismiss()
             return
         }
@@ -250,75 +189,42 @@ struct MotionConfiguratorView: View {
             actionValue: actionValue
         )
         
-        // Provide success feedback
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
         
         presentationMode.wrappedValue.dismiss()
     }
-    
-    // Added helper functions to fix the "cannot find in scope" errors
-    private func getToggleOnMessage(from configString: String) -> String {
-        if configString.contains("|") {
-            let parts = configString.split(separator: "|", maxSplits: 1)
-            return String(parts[0])
-        }
-        return configString.isEmpty ? "on" : configString
-    }
-    
-    private func getToggleOffMessage(from configString: String) -> String {
-        if configString.contains("|") {
-            let parts = configString.split(separator: "|", maxSplits: 1)
-            return parts.count > 1 ? String(parts[1]) : "off"
-        }
-        return "off"
-    }
 }
-
-// Help sheet explaining motion controls
 
 struct MotionConfiguratorView_Previews: PreviewProvider {
     static var previews: some View {
         Group {
-            // Button control preview
             MotionConfiguratorView(
                 deviceId: 1,
                 control: sampleControl(type: .button)
             )
             .previewDisplayName("Button Control")
             
-            // Toggle control preview
             MotionConfiguratorView(
                 deviceId: 1,
                 control: sampleControl(type: .toggle)
             )
             .previewDisplayName("Toggle Control")
             
-            // Slider control preview
             MotionConfiguratorView(
                 deviceId: 1,
                 control: sampleControl(type: .slider)
             )
             .previewDisplayName("Slider Control")
             
-            // Data display control preview
             MotionConfiguratorView(
                 deviceId: 1,
                 control: sampleControl(type: .dataDisplay)
             )
             .previewDisplayName("Data Display")
-            
-            // Dark mode preview
-            MotionConfiguratorView(
-                deviceId: 1,
-                control: sampleControl(type: .slider)
-            )
-            .preferredColorScheme(.dark)
-            .previewDisplayName("Dark Mode")
         }
     }
     
-    // Helper function to create sample controls for previewing
     static func sampleControl(type: ControlType) -> DeviceControl {
         switch type {
         case .button:

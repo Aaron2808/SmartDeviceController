@@ -54,13 +54,6 @@ struct ModuleCard: View {
             Text(module.name)
                 .font(.headline)
                 .multilineTextAlignment(.center)
-            
-            Text(module.description)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 8)
-                .padding(.bottom, 8)
         }
         .frame(maxWidth: .infinity, minHeight: 180)
         .background(

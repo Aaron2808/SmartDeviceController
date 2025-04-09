@@ -2,8 +2,8 @@ import SwiftUI
 
 struct ModuleSelect: View {
     let moduleType: ControlType
-    let topics: [String]  // These topics should be pre-filtered for the device
-    let deviceId: Int?    // Optional device ID for data point filtering
+    let topics: [String]
+    let deviceId: Int?
     
     @Binding var selectedTopic: String
     @Binding var message: String
@@ -35,7 +35,6 @@ struct ModuleSelect: View {
     
     @ObservedObject private var mqttBroker = MQTTBroker.shared
     
-    // Initialize without deviceId for backward compatibility
     init(moduleType: ControlType, topics: [String], selectedTopic: Binding<String>, message: Binding<String>, minValue: Binding<Double>, maxValue: Binding<Double>, displayName: Binding<String>, selectedDataPoint: Binding<MQTTBroker.DataPoint?>, useDataPoint: Binding<Bool>, customColor: Binding<String?>, customIcon: Binding<String?>, customUnit: Binding<String?>, backgroundColor: Binding<String?>, textColor: Binding<String?>, onSave: @escaping () -> Void, onCancel: @escaping () -> Void) {
         self.moduleType = moduleType
         self.topics = topics
@@ -56,7 +55,6 @@ struct ModuleSelect: View {
         self.onCancel = onCancel
     }
     
-    // Initialize with deviceId for device-specific filtering
     init(moduleType: ControlType, topics: [String], deviceId: Int, selectedTopic: Binding<String>, message: Binding<String>, minValue: Binding<Double>, maxValue: Binding<Double>, displayName: Binding<String>, selectedDataPoint: Binding<MQTTBroker.DataPoint?>, useDataPoint: Binding<Bool>, customColor: Binding<String?>, customIcon: Binding<String?>, customUnit: Binding<String?>, backgroundColor: Binding<String?>, textColor: Binding<String?>, onSave: @escaping () -> Void, onCancel: @escaping () -> Void) {
         self.moduleType = moduleType
         self.topics = topics
@@ -137,7 +135,6 @@ struct ModuleSelect: View {
                         }
                     }
                     
-                    // If a device is specified, show the device topic as info
                     if let deviceId = deviceId,
                        let device = DeviceManager.shared.getDevice(withId: deviceId),
                        let deviceTopic = device.mqttTopic,
@@ -225,14 +222,12 @@ struct ModuleSelect: View {
                                         .keyboardType(.numberPad)
                                 }
                                 
-                                // Add a test slider to verify configuration
                                 if minValue < maxValue {
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text("Test slider:")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
                                         
-                                        // Local state for test slider
                                         let testBinding = Binding<Double>(
                                             get: { (minValue + maxValue) / 2 },
                                             set: { _ in }
@@ -279,7 +274,6 @@ struct ModuleSelect: View {
                                             .autocapitalization(.none)
                                             .disableAutocorrection(true)
                                             .onChange(of: message) { oldValue, newValue in
-                                                // Remove any JSON characters if user starts typing them
                                                 if newValue.contains("{") || newValue.contains("}") || newValue.contains(":") {
                                                     let cleanedText = newValue
                                                         .replacingOccurrences(of: "{", with: "")
@@ -292,7 +286,6 @@ struct ModuleSelect: View {
                                     }
                                     
                                     if !message.isEmpty {
-                                        // Show preview of the formatted payload
                                         let formattedPayload = "{\"\(message)\": \(Int((minValue + maxValue) / 2))}"
                                         
                                         VStack(alignment: .leading, spacing: 4) {
@@ -416,7 +409,7 @@ struct ModuleSelect: View {
                 DataPointSelectorSheet(
                     mqttBroker: mqttBroker,
                     selectedDataPoint: $selectedDataPoint,
-                    deviceId: deviceId  // Pass device ID for filtering
+                    deviceId: deviceId
                 )
             }
             .onAppear {
@@ -453,12 +446,10 @@ struct ModuleSelect: View {
         case .toggle:
             previewMessage = message.isEmpty ? "on" : message
         case .slider:
-            // For slider, handle the property name format correctly
+
             if !message.isEmpty && !message.contains("{") {
-                // If message is a property name, we'll use a middle value
                 previewMessage = message
             } else {
-                // Otherwise use a raw value
                 previewMessage = "\(Int((minValue + maxValue) / 2))"
             }
         case .dataDisplay:
@@ -493,7 +484,6 @@ struct ModuleSelect: View {
     }
     
     private func prepareAndSave() {
-        // Collect debug info before saving
         print("Saving module: \(moduleType.rawValue)")
         print("Selected topic: \(selectedTopic)")
         print("Use data point: \(useDataPoint)")
@@ -501,7 +491,6 @@ struct ModuleSelect: View {
             print("Selected data point: \(dataPoint.name)")
         }
         
-        // Update all necessary values
         if customColor == nil {
             customColor = selectedColor.toHex()
             print("Set custom color to: \(customColor ?? "nil")")
@@ -515,7 +504,6 @@ struct ModuleSelect: View {
             print("Updated topic to custom input: \(selectedTopic)")
         }
         
-        // Call the onSave closure
         onSave()
     }
     

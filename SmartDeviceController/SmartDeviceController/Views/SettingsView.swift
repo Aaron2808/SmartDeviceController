@@ -7,11 +7,12 @@ struct SettingsView: View {
     @State private var isConnected = false
     @State private var connectionTimer: Timer?
     
-    // Notification settings
     @State private var notificationsEnabled = false
     @State private var automationAlerts = true
     @State private var timerAlerts = true
     @State private var isSavingNotificationSettings = false
+    
+    @State private var advancedModeEnabled = false
     
     func updateConnectionStatus() {
         connectionStatus = isConnected ? "Connected" : "Not Connected"
@@ -52,7 +53,6 @@ struct SettingsView: View {
                     Toggle("Enable Notifications", isOn: $notificationsEnabled)
                         .onChange(of: notificationsEnabled) { oldValue, newValue in
                             if newValue {
-                                // Request permission when enabling
                                 requestNotificationPermission()
                             }
                         }
@@ -67,6 +67,25 @@ struct SettingsView: View {
                             .onChange(of: timerAlerts) { _, _ in
                                 saveNotificationSettings()
                             }
+                    }
+                }
+                
+                Section(header: Text("Interface Settings")) {
+                    Toggle("Advanced Mode", isOn: $advancedModeEnabled)
+                        .onChange(of: advancedModeEnabled) { _, newValue in
+                            UserDefaults.standard.set(newValue, forKey: "advancedModeEnabled")
+                            UserDefaults.standard.synchronize()
+                        }
+                        .tint(.blue)
+                    
+                    if advancedModeEnabled {
+                        Text("Shows additional controls for motion, timers, and automations")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Enable to access advanced control features")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
                 
@@ -116,6 +135,8 @@ struct SettingsView: View {
             setupConnectionStatusUpdater()
             checkNotificationStatus()
             loadNotificationSettings()
+            
+            advancedModeEnabled = UserDefaults.standard.bool(forKey: "advancedModeEnabled")
         }
         .onDisappear {
             connectionTimer?.invalidate()
@@ -158,7 +179,6 @@ struct SettingsView: View {
             DispatchQueue.main.async {
                 if granted {
                     notificationsEnabled = true
-                    // Set up notification categories
                     NotificationHandler.shared.setupNotificationCategories()
                 } else {
                     notificationsEnabled = false

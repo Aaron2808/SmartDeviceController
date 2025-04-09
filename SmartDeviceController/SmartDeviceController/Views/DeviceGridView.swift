@@ -74,16 +74,7 @@ struct DeviceGridView: View {
                                         NavigationLink(destination: DeviceControlView(device: device)) {
                                             VStack {
                                                 DeviceCard(device: device)
-                                                // Show MQTT topic if available
-                                                if let topic = device.mqttTopic, !topic.isEmpty {
-                                                    Text(topic)
-                                                        .font(.caption)
-                                                        .foregroundColor(.secondary)
-                                                        .lineLimit(1)
-                                                        .truncationMode(.middle)
-                                                        .frame(maxWidth: 140)
-                                                }
-                                            }
+                                           }
                                         }
                                         .contextMenu {
                                             Button(role: .destructive) {
@@ -162,7 +153,6 @@ struct DeviceGridView: View {
     private func loadDevices() {
         devices = DeviceManager.shared.loadDevices()
         
-        // If no devices exist yet, create some defaults
         if devices.isEmpty {
             devices = [
                 Device(id: 3, name: "Smart Plug", location: "Kitchen", color: .red, image: "poweroutlet.type.g", mqttTopic: nil),
@@ -182,7 +172,6 @@ struct SideMenuView: View {
     
     var body: some View {
         ZStack {
-            // Semi-transparent background
             if isShowing {
                 Color.black.opacity(0.3)
                     .ignoresSafeArea()
@@ -193,10 +182,8 @@ struct SideMenuView: View {
                     }
             }
             
-            // Side menu
             HStack {
                 VStack(alignment: .leading, spacing: 0) {
-                    // Header
                     HStack {
                         Text("Menu")
                             .font(.title2)
@@ -221,9 +208,7 @@ struct SideMenuView: View {
                     
                     Divider()
                     
-                    // Menu items
                     VStack(spacing: 0) {
-                        // Devices
                         Button(action: {
                             withAnimation(.easeInOut) {
                                 isShowing = false
@@ -232,7 +217,6 @@ struct SideMenuView: View {
                             MenuRow(title: "Devices", icon: "house")
                         }
                         
-                        // Energy Cost View
                         Button(action: {
                             withAnimation(.easeInOut) {
                                 isShowing = false
@@ -242,7 +226,6 @@ struct SideMenuView: View {
                             MenuRow(title: "Energy Costs", icon: "bolt.circle.fill")
                         }
                         
-                        // ALL Automations
                         Button(action: {
                             withAnimation(.easeInOut) {
                                 isShowing = false

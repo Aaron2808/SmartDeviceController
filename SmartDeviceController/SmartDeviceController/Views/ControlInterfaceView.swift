@@ -1,34 +1,25 @@
 import SwiftUI
+import Combine
 
 struct ControlInterfaceView: View {
     let control: DeviceControl
     let onAction: (String) -> Void
-    // Add an optional onLongPress handler with default value of nil
     var onLongPress: (() -> Void)? = nil
     var isPreview: Bool = false
     
-    // Device ID for this control (default to 0 if not known)
     var deviceId: Int = 0
     
-    // Add a way to pass in the current value from parent
     var currentValue: Double?
     
     @State private var sliderValue: Double = 0
     @State private var isToggleOn: Bool = false
     @State private var displayValue: String = "--"
     @State private var timer: Timer? = nil
+    @State private var isDragging: Bool = false
     
-    // Context menu and sheet states
     @State private var showMotionConfigurator = false
     @State private var showTimerConfigurator = false
     
-    // Motion control states
-    @State private var isMotionControlActive = false
-    @State private var previousRotation: Double = 0
-    @State private var previousTilt: Double = 0
-    @State private var motionFeedback = false
-    
-    // Add a state variable to track if long press is in progress
     @GestureState private var isDetectingLongPress = false
     @State private var isLongPressDetected = false
     
@@ -37,7 +28,7 @@ struct ControlInterfaceView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Header row with title and icons
+
             HStack {
                 Text(control.displayName.isEmpty ? control.topic : control.displayName)
                     .font(.headline)
@@ -52,10 +43,8 @@ struct ControlInterfaceView: View {
             .padding(.bottom, 4)
             
             if control.controlType == .slider {
-                // Special handling for slider with motion control
-                renderSliderWithMotionControl()
+                renderSliderControl()
             } else {
-                // Original control rendering for other types
                 renderControlContent()
                     .frame(height: 60)
             }
@@ -67,36 +56,14 @@ struct ControlInterfaceView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(
-                    control.controlType == .slider && isMotionControlActive
-                        ? control.getCustomColor()
-                        : control.getCustomColor().opacity(0.5),
-                    lineWidth: control.controlType == .slider && isMotionControlActive ? 3 : 2
-                )
-        )
-        .overlay(
-            // Motion control indicator overlay - only for active motion feedback
-            Group {
-                if control.controlType == .slider && isMotionControlActive && motionFeedback {
-                    Text("Twist/tilt left to decrease, right to increase")
-                        .font(.caption)
-                        .padding(6)
-                        .background(control.getCustomColor().opacity(0.2))
-                        .cornerRadius(4)
-                        .transition(.opacity)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                        .padding(.bottom, 8)
-                }
-            }
+                .stroke(control.getCustomColor().opacity(0.5), lineWidth: 2)
         )
         .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 1)
-        // Double-tap as an alternative to long press for edit
         .onTapGesture(count: 2) {
             if !isPreview && onLongPress != nil {
                 onLongPress?()
             }
         }
-        // Apply long press gesture for edit
         .gesture(
             LongPressGesture(minimumDuration: 0.75)
                 .updating($isDetectingLongPress) { currentState, gestureState, _ in
@@ -106,11 +73,9 @@ struct ControlInterfaceView: View {
                     if !isPreview {
                         print("Long press detected on control")
                         
-                        // Trigger the haptic feedback
                         let generator = UIImpactFeedbackGenerator(style: .medium)
                         generator.impactOccurred()
                         
-                        // Call the onLongPress handler
                         if let onLongPress = onLongPress {
                             onLongPress()
                         }
@@ -136,65 +101,31 @@ struct ControlInterfaceView: View {
         }
     }
     
-    // MARK: - Setup Methods
     
     private func setupInitialValues() {
         if control.controlType == .slider {
-            // If parent provided a value, use it
             if let value = currentValue {
                 sliderValue = value
-            } else if let valueFromMessage = Double(control.message) {
-                // Try to parse a direct number from the message
-                sliderValue = valueFromMessage
-            } else if let jsonValue = extractValueFromJson(control.message) {
-                // Try to extract from JSON if the message is a property name
-                sliderValue = jsonValue
             } else {
-                // Fall back to min value
-                sliderValue = control.minValue
+                updateSliderValueFromMQTT()
             }
             
-            // Set up a timer to check for MQTT value changes
             timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
-                // Don't use weak self here since ControlView is a struct
-                if let value = mqttBroker.getValue(topic: control.topic) {
-                    var numValue: Double?
-                    
-                    // Try to get numeric value based on data type
-                    if case .number(let num) = value {
-                        numValue = num
-                    } else if case .text(let str) = value, let parsed = Double(str) {
-                        numValue = parsed
-                    } else if case .jsonObject(let dict) = value, !control.message.isEmpty {
-                        // Try to extract from a JSON object if message is a property name
-                        if let propertyValue = dict[control.message] as? Double {
-                            numValue = propertyValue
-                        } else if let propertyValue = dict[control.message] as? Int {
-                            numValue = Double(propertyValue)
-                        }
-                    }
-                    
-                    // Update the slider value if we got a number and it's significantly different
-                    if let updatedValue = numValue, abs(updatedValue - sliderValue) > 0.5 {
-                        withAnimation(.easeOut(duration: 0.3)) {
-                            sliderValue = updatedValue
-                        }
-                    }
-                }
+                updateSliderValueFromMQTT()
             }
             
             if let timer = timer {
                 RunLoop.current.add(timer, forMode: .common)
             }
         } else if control.controlType == .toggle {
-            if let topicValue = mqttBroker.getValue(topic: control.topic) {
-                if let boolValue = topicValue.asBool() {
-                    isToggleOn = boolValue
-                } else if case .text(let stringValue) = topicValue {
-                    isToggleOn = stringValue.lowercased() == control.message.lowercased()
-                }
-            } else {
-                isToggleOn = false
+            updateToggleValueFromMQTT()
+            
+            timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+                updateToggleValueFromMQTT()
+            }
+            
+            if let timer = timer {
+                RunLoop.current.add(timer, forMode: .common)
             }
         } else if control.controlType == .dataDisplay {
             updateDisplayValue()
@@ -208,37 +139,57 @@ struct ControlInterfaceView: View {
         }
     }
     
+    private func updateSliderValueFromMQTT() {
+        if let value = mqttBroker.getValue(topic: control.topic) {
+            var numValue: Double?
+            
+            if case .number(let num) = value {
+                numValue = num
+            } else if case .text(let str) = value, let parsed = Double(str) {
+                numValue = parsed
+            } else if case .jsonObject(let dict) = value, !control.message.isEmpty {
+                if let propertyValue = dict[control.message] as? Double {
+                    numValue = propertyValue
+                } else if let propertyValue = dict[control.message] as? Int {
+                    numValue = Double(propertyValue)
+                }
+            }
+            
+            if let updatedValue = numValue, abs(updatedValue - sliderValue) > 0.1, !isDragging {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    sliderValue = updatedValue
+                }
+            }
+        }
+    }
+    
+    private func updateToggleValueFromMQTT() {
+        if let topicValue = mqttBroker.getValue(topic: control.topic) {
+            let newToggleState: Bool
+            
+            if let boolValue = topicValue.asBool() {
+                newToggleState = boolValue
+            } else if case .text(let stringValue) = topicValue {
+                let onMessage = getToggleOnMessage(from: control.message).lowercased()
+                newToggleState = stringValue.lowercased() == onMessage
+            } else if case .number(let numValue) = topicValue {
+                newToggleState = numValue != 0
+            } else {
+                newToggleState = false
+            }
+            
+            if isToggleOn != newToggleState {
+                withAnimation {
+                    isToggleOn = newToggleState
+                }
+            }
+        }
+    }
+    
     private func cleanupOnDisappear() {
         timer?.invalidate()
         timer = nil
-        
-        // Always stop motion tracking when leaving the view
-        if isMotionControlActive {
-            isMotionControlActive = false
-            motionManager.stopMotionTracking()
-        }
     }
-    
-    // MARK: - Helper function to extract value from JSON
-    
-    private func extractValueFromJson(_ message: String) -> Double? {
-        // If message is a property name for JSON control
-        if !message.isEmpty && !message.contains("{") && !message.contains("}") {
-            // Try to get the current value from MQTT
-            if let value = mqttBroker.getValue(topic: control.topic),
-               case .jsonObject(let dict) = value,
-               let propertyValue = dict[message] as? Double {
-                return propertyValue
-            } else if let value = mqttBroker.getValue(topic: control.topic),
-                     case .jsonObject(let dict) = value,
-                     let propertyValue = dict[message] as? Int {
-                return Double(propertyValue)
-            }
-        }
-        return nil
-    }
-    
-    // MARK: - Display Value Methods
     
     private func updateDisplayValue() {
         var updatedValue: String? = nil
@@ -259,7 +210,7 @@ struct ControlInterfaceView: View {
                 let topicParts = control.topic.split(separator: "/")
                 let displayNameLower = control.displayName.lowercased()
                 
-                if topicParts.count >= 2 {
+                if topicParts.count >= 3 {
                     let possibleJsonTopic = control.topic
                     if let jsonValue = mqttBroker.getValue(topic: possibleJsonTopic),
                        case .jsonObject(let dict) = jsonValue {
@@ -346,44 +297,47 @@ struct ControlInterfaceView: View {
         return "\(value)\(unit)"
     }
     
-    // MARK: - UI Rendering
     
-    private func renderSliderWithMotionControl() -> some View {
+    private func renderSliderControl() -> some View {
         VStack(spacing: 8) {
-            HStack {
-                Slider(
-                    value: Binding(
-                        get: { sliderValue },
-                        set: { newValue in
-                            // Update the local state first
-                            sliderValue = newValue
-                            
-                            // Prepare the message to send
-                            let messageToSend: String
-                            
-                            // Check if message is a property name for JSON formatting
-                            if !control.message.isEmpty && !control.message.contains("{") && !control.message.contains("}") {
-                                // Create JSON payload with property name
-                                messageToSend = "{\"\(control.message)\": \(Int(newValue))}"
-                            } else if control.message.contains("{value}") {
-                                // Legacy support for old format with {value} placeholder
-                                messageToSend = control.message.replacingOccurrences(
-                                    of: "{value}",
-                                    with: "\(Int(newValue))"
-                                )
-                            } else {
-                                // Default to sending just the value
-                                messageToSend = "\(Int(newValue))"
-                            }
-                            
-                            // Send the MQTT message
-                            onAction(messageToSend)
+            GeometryReader { geometry in
+                let width = geometry.size.width
+                
+                ZStack(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(height: 8)
+                        .cornerRadius(4)
+                    
+                    let percentage = (sliderValue - control.minValue) / (control.maxValue - control.minValue)
+                    let fillWidth = width * CGFloat(percentage)
+                    
+                    Rectangle()
+                        .fill(control.getCustomColor())
+                        .frame(width: max(0, min(fillWidth, width)), height: 8)
+                        .cornerRadius(4)
+                    
+                    Circle()
+                        .fill(control.getCustomColor())
+                        .frame(width: 20, height: 20)
+                        .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+                        .offset(x: max(0, min(fillWidth - 10, width - 20)))
+                }
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            isDragging = true
+                            let xPos = value.location.x
+                            let percentage = Double(max(0, min(xPos, width)) / width)
+                            sliderValue = control.minValue + (control.maxValue - control.minValue) * percentage
                         }
-                    ),
-                    in: control.minValue...control.maxValue
+                        .onEnded { _ in
+                            sendSliderValue()
+                            isDragging = false
+                        }
                 )
-                .accentColor(control.getCustomColor())
             }
+            .frame(height: 30)
             
             HStack {
                 Text("\(Int(control.minValue))")
@@ -404,21 +358,22 @@ struct ControlInterfaceView: View {
                     .foregroundColor(control.getTextColor().opacity(0.6))
             }
         }
-        .frame(height: 60)
     }
     
-    private func toggleMotionControl() {
-        isMotionControlActive.toggle()
-        
-        if isMotionControlActive {
-            // Show feedback briefly
-            motionFeedback = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                motionFeedback = false
-            }
+    private func sendSliderValue() {
+        let messageToSend: String
+        if !control.message.isEmpty && !control.message.contains("{") && !control.message.contains("}") {
+            messageToSend = "{\"\(control.message)\": \(Int(sliderValue))}"
+        } else if control.message.contains("{value}") {
+            messageToSend = control.message.replacingOccurrences(
+                of: "{value}",
+                with: "\(Int(sliderValue))"
+            )
         } else {
-            motionFeedback = false
+            messageToSend = "\(Int(sliderValue))"
         }
+        
+        onAction(messageToSend)
     }
     
     @ViewBuilder
@@ -435,10 +390,9 @@ struct ControlInterfaceView: View {
                     .foregroundColor(.white)
                     .cornerRadius(8)
             }
-            .buttonStyle(BorderlessButtonStyle()) // This is important to allow the overlay to catch gestures
+            .buttonStyle(BorderlessButtonStyle())
             
         case .slider:
-            // This case is handled separately in renderSliderWithMotionControl()
             EmptyView()
             
         case .toggle:
@@ -492,20 +446,19 @@ struct ControlInterfaceView: View {
         return (configString.isEmpty ? "on" : configString, "off")
     }
     
-    private func getToggleOnMessage() -> String {
-        if control.message.contains("|") {
-            let parts = control.message.split(separator: "|", maxSplits: 1)
+    private func getToggleOnMessage(from configString: String) -> String {
+        if configString.contains("|") {
+            let parts = configString.split(separator: "|", maxSplits: 1)
             return String(parts[0])
         }
-        return control.message.isEmpty ? "on" : control.message
+        return configString.isEmpty ? "on" : configString
     }
     
-    private func getToggleOffMessage() -> String {
-        if control.message.contains("|") {
-            let parts = control.message.split(separator: "|", maxSplits: 1)
+    private func getToggleOffMessage(from configString: String) -> String {
+        if configString.contains("|") {
+            let parts = configString.split(separator: "|", maxSplits: 1)
             return parts.count > 1 ? String(parts[1]) : "off"
         }
         return "off"
     }
 }
-

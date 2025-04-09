@@ -11,7 +11,6 @@ struct AutomationsView: View {
     var body: some View {
         NavigationView {
             VStack {
-                // Header with automation status
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Automations")
@@ -37,7 +36,6 @@ struct AutomationsView: View {
                 .padding(.horizontal)
                 .padding(.top)
                 
-                // Rules list or empty state
                 let rules = automationManager.getRules(forDevice: deviceId)
                 
                 if rules.isEmpty {
@@ -47,14 +45,11 @@ struct AutomationsView: View {
                         ForEach(rules) { rule in
                             AutomationRuleRow(rule: rule)
                                 .contextMenu {
-                                    // Edit button
                                     Button(action: {
-                                        // Editing existing rules
                                     }) {
                                         Label("Edit", systemImage: "pencil")
                                     }
                                     
-                                    // Toggle enabled state
                                     Button(action: {
                                         automationManager.updateRule(id: rule.id, isEnabled: !rule.isEnabled)
                                     }) {
@@ -64,7 +59,6 @@ struct AutomationsView: View {
                                     
                                     Divider()
                                     
-                                    // Delete button
                                     Button(role: .destructive, action: {
                                         selectedRuleId = rule.id
                                         showDeleteAlert = true
@@ -72,7 +66,6 @@ struct AutomationsView: View {
                                         Label("Delete", systemImage: "trash")
                                     }
                                 }
-                                // Add swipe actions for easier deletion
                                 .swipeActions(edge: .trailing) {
                                     Button(role: .destructive) {
                                         selectedRuleId = rule.id
@@ -85,7 +78,6 @@ struct AutomationsView: View {
                     }
                 }
                 
-                // Add automation button
                 Button(action: {
                     showAddAutomation = true
                 }) {
@@ -105,7 +97,6 @@ struct AutomationsView: View {
             }
             .navigationBarTitle("Automations", displayMode: .inline)
             .navigationBarItems(trailing: Button("Done") {
-                // Dismiss or handle done action
             })
             .alert(isPresented: $showDeleteAlert) {
                 Alert(
@@ -149,11 +140,11 @@ struct AutomationRuleRow: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Rule name
+
             Text(rule.name)
                 .font(.headline)
                 .foregroundColor(rule.isEnabled ? .primary : .secondary)
-            // Source device with clear label
+
             HStack {
                 Text("Device:")
                     .font(.caption)
@@ -165,7 +156,6 @@ struct AutomationRuleRow: View {
                     .foregroundColor(rule.isEnabled ? .blue : .gray)
             }
             
-            // Target control with clear label
             HStack {
                 Text("Control:")
                     .font(.caption)
@@ -188,12 +178,11 @@ struct AutomationRuleRow: View {
     }
     
     private func getSourceDeviceName() -> String {
-        // First try to get from DeviceManager
+        
         if let device = DeviceManager.shared.getDevice(withId: rule.condition.sourceDeviceId) {
             return device.name
         }
         
-        // Fallback to any displayName in MQTT broker
         if let deviceContext = mqttBroker.deviceContexts[String(rule.condition.sourceDeviceId)] {
             return deviceContext.displayName
         }
@@ -201,9 +190,7 @@ struct AutomationRuleRow: View {
         return "Device \(rule.condition.sourceDeviceId)"
     }
     
-    // Get the control name
     private func getControlName() -> String {
-        // Dynamic loading of controls from UserDefaults
         let controls = UserDefaultsManager.shared.getAllControlsFlat()
         if let control = controls.first(where: { $0.id == rule.action.targetControlId }) {
             return control.displayName
@@ -211,7 +198,6 @@ struct AutomationRuleRow: View {
         return "Control \(rule.action.targetControlId)"
     }
     
-    // Get text for the action
     private func getActionText() -> String {
         switch rule.action.actionType {
         case .turnOn:
@@ -256,7 +242,6 @@ struct AddAutomationView: View {
                 }
                 
                 Section(header: Text("Condition")) {
-                    // Source device picker
                     Picker("Source Device", selection: $selectedSourceDeviceId) {
                         Text("Select a device").tag(Optional<Int>(nil))
                         ForEach(getAllDevices(), id: \.id) { device in
@@ -265,7 +250,6 @@ struct AddAutomationView: View {
                     }
                     .pickerStyle(MenuPickerStyle())
                     
-                    // Data point selector
                     if let sourceDeviceId = selectedSourceDeviceId {
                         Button(action: {
                             showDataPointSelector = true
@@ -290,7 +274,6 @@ struct AddAutomationView: View {
                             }
                         }
                         
-                        // Comparator picker
                         Picker("Condition", selection: $selectedComparator) {
                             ForEach(RuleCondition.Comparator.allCases, id: \.self) { comparator in
                                 Text(comparator.displayName).tag(comparator)
@@ -298,14 +281,12 @@ struct AddAutomationView: View {
                         }
                         .pickerStyle(MenuPickerStyle())
                         
-                        // Value input
                         TextField("Value", text: $conditionValue)
                             .keyboardType(getKeyboardType())
                     }
                 }
                 
                 Section(header: Text("Action")) {
-                    // Target control selector
                     Button(action: {
                         showTargetControlSelector = true
                     }) {
@@ -329,7 +310,6 @@ struct AddAutomationView: View {
                         }
                     }
                     
-                    // Action type picker
                     if selectedTargetControlId != nil {
                         Picker("Action", selection: $selectedActionType) {
                             ForEach(RuleAction.ActionType.allCases, id: \.self) { actionType in
@@ -338,7 +318,6 @@ struct AddAutomationView: View {
                         }
                         .pickerStyle(MenuPickerStyle())
                         
-                        // Only show value input for setValue action
                         if selectedActionType == .setValue {
                             TextField("Value", text: $actionValue)
                                 .keyboardType(.decimalPad)
@@ -436,9 +415,7 @@ struct AddAutomationView: View {
         return .default
     }
     
-    // Helper functions for device and control data
     private func getAllDevices() -> [Device] {
-        // This would need to be implemented based on your app's data structure
         return DeviceManager.shared.loadDevices()
     }
     
@@ -450,7 +427,6 @@ struct AddAutomationView: View {
     private func getAllControls() -> [DeviceControl] {
         var allControls: [DeviceControl] = []
         
-        // Iterate through all device control files in UserDefaults
         let defaults = UserDefaults.standard
         let dictionaryRepresentation = defaults.dictionaryRepresentation()
         
@@ -515,7 +491,6 @@ struct ControlSelectorView: View {
     private func getAllControls() -> [DeviceControl] {
         var allControls: [DeviceControl] = []
         
-        // Iterate through all device control files in UserDefaults
         let defaults = UserDefaults.standard
         let dictionaryRepresentation = defaults.dictionaryRepresentation()
         
@@ -535,20 +510,12 @@ struct ControlSelectorView: View {
 struct AutomationsView_Previews: PreviewProvider {
     static var previews: some View {
         Group {
-            // Preview with no rules (empty state)
             AutomationsView(deviceId: 1)
                 .previewDisplayName("Empty State")
             
-            // Preview with a different device
             AutomationsView(deviceId: 999)
                 .previewDisplayName("Device 2")
                 
-            // Preview in dark mode
-            AutomationsView(deviceId: 1)
-                .preferredColorScheme(.dark)
-                .previewDisplayName("Dark Mode")
-                
-            // Preview of add automation view
             AddAutomationView(deviceId: 1)
                 .previewDisplayName("Add Automation")
         }
@@ -586,7 +553,6 @@ struct AllAutomationsView: View {
     var body: some View {
         NavigationView {
             VStack {
-                // Header with automation status
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("All Automations")
@@ -615,19 +581,16 @@ struct AllAutomationsView: View {
                 }
                 .padding()
                 
-                // Rules list or empty state
                 if automationManager.automationRules.isEmpty {
                     emptyStateView
                 } else {
                     List {
-                        // Group by device
                         ForEach(getDeviceGroups(), id: \.id) { device in
                             Section(header: Text(device.name)) {
                                 let deviceRules = automationManager.getRules(forDevice: device.id)
                                 ForEach(deviceRules) { rule in
                                     AutomationRuleRow(rule: rule)
                                         .contextMenu {
-                                            // Delete option
                                             Button(role: .destructive) {
                                                 selectedRuleId = rule.id
                                                 showDeleteAlert = true
@@ -635,7 +598,6 @@ struct AllAutomationsView: View {
                                                 Label("Delete", systemImage: "trash")
                                             }
                                             
-                                            // Toggle enabled state
                                             Button(action: {
                                                 automationManager.updateRule(id: rule.id, isEnabled: !rule.isEnabled)
                                             }) {
@@ -698,12 +660,10 @@ struct AllAutomationsView: View {
         }
     }
     
-    // Get unique devices that have automations
     private func getDeviceGroups() -> [Device] {
-        // Get unique device IDs with automations
+        
         let deviceIds = Set(automationManager.automationRules.map { $0.deviceId })
         
-        // Create device objects (simplified - in a real app you'd fetch actual device data)
         return deviceIds.map { deviceId in
             Device(
                 id: deviceId,
@@ -716,9 +676,8 @@ struct AllAutomationsView: View {
         }.sorted { $0.name < $1.name }
     }
     
-    // Helper to get device name - in a real implementation you'd fetch this from your device store
     private func getDeviceName(_ deviceId: Int) -> String {
-        // This is a placeholder - in a real app you'd look up the actual device name
+
         let sampleDevices = [
             1: "Smart Light",
             2: "Thermostat",
@@ -731,9 +690,7 @@ struct AllAutomationsView: View {
 }
 
 
-// In AddAutomationView, replace the getAllDevices method with:
 private func getAllDevices() -> [Device] {
-    // Get devices from DeviceManager instead of hardcoding
     return DeviceManager.shared.loadDevices()
 }
 

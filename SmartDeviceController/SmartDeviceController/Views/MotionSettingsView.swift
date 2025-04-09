@@ -3,19 +3,21 @@ import SwiftUI
 struct MotionControlSettingsView: View {
     @ObservedObject private var motionManager = MotionControlManager.shared
     @State private var showMotionTestView = false
+    @State private var showingDeleteAlert = false
+    @State private var actionToDelete: MotionAction? = nil
     
     var body: some View {
         Form {
             Section(header: Text("Motion Controls")) {
                 Toggle("Enable Motion Controls", isOn: $motionManager.isMotionEnabled)
-                    .onChange(of: motionManager.isMotionEnabled) { _, newValue in
+                    .onChange(of: motionManager.isMotionEnabled) { oldValue, newValue in
                         motionManager.saveSettings()
                         
-                        // Stop motion tracking if disabling
                         if !newValue {
                             motionManager.stopMotionTracking()
                         }
                     }
+                
                 
                 if motionManager.isMotionEnabled {
                     if motionManager.isMotionAvailable {
@@ -41,7 +43,7 @@ struct MotionControlSettingsView: View {
                                     .foregroundColor(.secondary)
                                 
                                 Slider(value: $motionManager.motionSensitivity, in: 1...10, step: 1)
-                                    .onChange(of: motionManager.motionSensitivity) { _, _ in
+                                    .onChange(of: motionManager.motionSensitivity) { oldValue, newValue in
                                         motionManager.saveSettings()
                                     }
                                 
@@ -85,14 +87,6 @@ struct MotionControlSettingsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Twist Control")
                             .font(.headline)
-                        
-                        Text("Twist left = decrease value")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Text("Twist right = increase value")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
                     }
                 }
                 .padding(.vertical, 4)
@@ -105,20 +99,38 @@ struct MotionControlSettingsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Tilt Control")
                             .font(.headline)
-                        
-                        Text("Tilt left = decrease value")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Text("Tilt right = increase value")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+                
+                HStack {
+                    Image(systemName: "wave.3.right")
+                        .foregroundColor(.blue)
+                        .frame(width: 24, height: 24)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Shake Control")
+                            .font(.headline)
                     }
                 }
                 .padding(.vertical, 4)
             }
             
-            Section(header: Text("Active Motions")) {
+            Section(header:
+                HStack {
+                    Text("Active Motions")
+                    Spacer()
+                    if !motionManager.motionActions.isEmpty {
+                        Text("\(motionManager.motionActions.count)")
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.1))
+                            .foregroundColor(.blue)
+                            .cornerRadius(8)
+                    }
+                }
+            ) {
                 if motionManager.motionActions.isEmpty {
                     Text("No motion actions configured")
                         .foregroundColor(.secondary)
@@ -127,6 +139,22 @@ struct MotionControlSettingsView: View {
                 } else {
                     ForEach(motionManager.motionActions) { action in
                         MotionActionRow(action: action)
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    actionToDelete = action
+                                    showingDeleteAlert = true
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    actionToDelete = action
+                                    showingDeleteAlert = true
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
                     }
                 }
             }
@@ -135,15 +163,28 @@ struct MotionControlSettingsView: View {
         .sheet(isPresented: $showMotionTestView) {
             MotionTestView()
         }
+        .alert(isPresented: $showingDeleteAlert) {
+            Alert(
+                title: Text("Delete Motion Action"),
+                message: Text("Are you sure you want to delete this motion control?"),
+                primaryButton: .destructive(Text("Delete")) {
+                    if let action = actionToDelete {
+                        motionManager.removeMotionAction(id: action.id)
+                        actionToDelete = nil
+                    }
+                },
+                secondaryButton: .cancel()
+            )
+        }
     }
 }
 
 struct MotionActionRow: View {
     let action: MotionAction
+    @ObservedObject private var motionManager = MotionControlManager.shared
     
     var body: some View {
         HStack {
-            // Get the motion type icon
             if let motionType = MotionType.allCases.first(where: { $0.rawValue == action.motionType }) {
                 Image(systemName: motionType.iconName)
                     .foregroundColor(.blue)
@@ -155,10 +196,11 @@ struct MotionActionRow: View {
             }
             
             VStack(alignment: .leading, spacing: 2) {
-                Text(action.motionType)
+                Text(getControlName(action.controlId))
+                    .font(.headline)
                 
                 HStack {
-                    Text("Device: \(action.deviceId)")
+                    Text("Device: \(getDeviceName(action.deviceId))")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
@@ -166,19 +208,49 @@ struct MotionActionRow: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    Text("Control: \(action.controlId)")
+                    Text("Type: \(action.motionType)")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
-            
-            Spacer()
-            
-            Text(action.actionValue)
-                .font(.caption)
-                .padding(4)
-                .background(Color.blue.opacity(0.1))
-                .cornerRadius(4)
+        }
+        .contentShape(Rectangle())
+    }
+    
+    private func getControlName(_ controlId: Int) -> String {
+        let controls = getAllControls()
+        return controls.first(where: { $0.id == controlId })?.displayName ?? "Control \(controlId)"
+    }
+    
+    private func getDeviceName(_ deviceId: Int) -> String {
+        if let device = DeviceManager.shared.getDevice(withId: deviceId) {
+            return device.name
+        }
+        return "Device \(deviceId)"
+    }
+    
+    private func getAllControls() -> [DeviceControl] {
+        var allControls: [DeviceControl] = []
+        
+        let defaults = UserDefaults.standard
+        let dictionaryRepresentation = defaults.dictionaryRepresentation()
+        
+        for (key, _) in dictionaryRepresentation {
+            if key.starts(with: "controls_"),
+               let savedData = defaults.data(forKey: key),
+               let controls = try? JSONDecoder().decode([DeviceControl].self, from: savedData) {
+                allControls.append(contentsOf: controls)
+            }
+        }
+        
+        return allControls
+    }
+}
+
+struct MotionControlSettingsView_Previews: PreviewProvider {
+    static var previews: some View {
+        NavigationView {
+            MotionControlSettingsView()
         }
     }
 }
@@ -191,6 +263,7 @@ struct MotionTestView: View {
     @State private var twistValue: Double = 0
     @State private var tiltValue: Double = 0
     @State private var shakeDetected = false
+    @State private var lastActionDetected: String = "None"
     
     var body: some View {
         NavigationView {
@@ -208,7 +281,6 @@ struct MotionTestView: View {
                 }
                 
                 VStack(spacing: 30) {
-                    // Twist (rotation)
                     MotionTestMeter(
                         title: "Twist",
                         iconName: "rotate.right",
@@ -217,7 +289,6 @@ struct MotionTestView: View {
                         isActive: isTracking
                     )
                     
-                    // Tilt
                     MotionTestMeter(
                         title: "Tilt",
                         iconName: "iphone.gen3",
@@ -226,7 +297,6 @@ struct MotionTestView: View {
                         isActive: isTracking
                     )
                     
-                    // Shake
                     MotionTestMeter(
                         title: "Shake",
                         iconName: "wave.3.right",
@@ -238,6 +308,19 @@ struct MotionTestView: View {
                         isActive: isTracking,
                         isBinary: true
                     )
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Last Detected Action:")
+                            .font(.headline)
+                        
+                        Text(lastActionDetected)
+                            .font(.body)
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(8)
+                    }
+                    .padding(.top, 20)
                 }
                 .padding()
                 
@@ -268,9 +351,15 @@ struct MotionTestView: View {
                 presentationMode.wrappedValue.dismiss()
             })
             .onAppear {
-                // Reset values
                 twistValue = 0
                 tiltValue = 0
+                
+                let originalCallback = motionManager.onMotionActionTriggered
+                motionManager.onMotionActionTriggered = { controlId, actionValue in
+                    self.lastActionDetected = "Control ID: \(controlId), Action: \(actionValue)"
+                    
+                    originalCallback?(controlId, actionValue)
+                }
             }
             .onDisappear {
                 stopMotionTracking()
@@ -281,10 +370,8 @@ struct MotionTestView: View {
     private func startMotionTracking() {
         isTracking = true
         
-        // Start actual motion tracking
         motionManager.startMotionTracking()
         
-        // Set up timer to update our local values from the motion manager
         Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
             guard isTracking else {
                 timer.invalidate()
@@ -303,6 +390,12 @@ struct MotionTestView: View {
     }
 }
 
+struct MotionTestView_Previews: PreviewProvider {
+    static var previews: some View {
+        MotionTestView()
+    }
+}
+
 struct MotionTestMeter: View {
     let title: String
     let iconName: String
@@ -312,7 +405,6 @@ struct MotionTestMeter: View {
     var isBinary: Bool = false
     
     private var displayValue: Double {
-        // Normalize the value to be between -1 and 1 for display
         return max(min(value, 1), -1)
     }
     
@@ -334,7 +426,6 @@ struct MotionTestMeter: View {
             }
             
             if isBinary {
-                // Binary indicator (on/off)
                 HStack {
                     Spacer()
                     
@@ -352,21 +443,17 @@ struct MotionTestMeter: View {
                 }
                 .frame(height: 30)
             } else {
-                // Continuous meter
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
-                        // Background track
                         RoundedRectangle(cornerRadius: 4)
                             .fill(Color.gray.opacity(0.2))
                             .frame(height: 8)
                         
-                        // Zero marker (center)
                         Rectangle()
                             .fill(Color.gray.opacity(0.5))
                             .frame(width: 2, height: 16)
                             .position(x: geometry.size.width / 2, y: 8)
                         
-                        // Value indicator
                         if isActive {
                             Circle()
                                 .fill(color)
@@ -385,142 +472,5 @@ struct MotionTestMeter: View {
         .padding()
         .background(Color.gray.opacity(0.05))
         .cornerRadius(10)
-    }
-}
-
-struct MotionControlSettingsView_Previews: PreviewProvider {
-    static var previews: some View {
-        Group {
-            // Preview with motion enabled
-            NavigationView {
-                MotionControlSettingsView()
-                    .onAppear {
-                        // Set up preview state (doesn't affect actual app state)
-                        MotionControlManager.shared.isMotionEnabled = true
-                        MotionControlManager.shared.motionSensitivity = 5.0
-                    }
-            }
-            .previewDisplayName("Motion Enabled")
-            
-            // Preview with motion disabled
-            NavigationView {
-                MotionControlSettingsView()
-                    .onAppear {
-                        // Set up preview state
-                        MotionControlManager.shared.isMotionEnabled = false
-                    }
-            }
-            .previewDisplayName("Motion Disabled")
-            
-            // Preview with some motion actions
-            NavigationView {
-                MotionControlSettingsView()
-                    .onAppear {
-                        // For preview purposes only, add some sample motion actions
-                        // Note: This won't affect the actual app state
-                        MotionControlManager.shared.isMotionEnabled = true
-                        // Preview actions would be set up here if needed
-                    }
-            }
-            .previewDisplayName("With Motion Actions")
-            
-            // Dark mode preview
-            NavigationView {
-                MotionControlSettingsView()
-            }
-            .preferredColorScheme(.dark)
-            .previewDisplayName("Dark Mode")
-            
-            // Preview of the motion test view
-            MotionTestView()
-                .previewDisplayName("Motion Test View")
-        }
-    }
-}
-
-// Add a preview for the MotionActionRow
-struct MotionActionRow_Previews: PreviewProvider {
-    static var previews: some View {
-        List {
-            // Sample twist action
-            MotionActionRow(action: sampleAction(type: "Twist", value: "increase:10"))
-                .previewDisplayName("Twist Action")
-            
-            // Sample tilt action
-            MotionActionRow(action: sampleAction(type: "Tilt", value: "toggle"))
-                .previewDisplayName("Tilt Action")
-            
-            // Sample shake action
-            MotionActionRow(action: sampleAction(type: "Shake", value: "ON"))
-                .previewDisplayName("Shake Action")
-        }
-        .previewLayout(.sizeThatFits)
-    }
-    
-    // Helper to create sample motion actions for preview
-    static func sampleAction(type: String, value: String) -> MotionAction {
-        return MotionAction(
-            id: "preview-action",
-            deviceId: 1,
-            controlId: 123,
-            motionType: type,
-            actionValue: value
-        )
-    }
-}
-
-// Add a preview for the MotionTestMeter component
-struct MotionTestMeter_Previews: PreviewProvider {
-    static var previews: some View {
-        VStack(spacing: 20) {
-            // Active meter with positive value
-            MotionTestMeter(
-                title: "Twist Right",
-                iconName: "rotate.right",
-                value: .constant(0.75),
-                color: .blue,
-                isActive: true
-            )
-            
-            // Active meter with negative value
-            MotionTestMeter(
-                title: "Twist Left",
-                iconName: "rotate.left",
-                value: .constant(-0.50),
-                color: .blue,
-                isActive: true
-            )
-            
-            // Binary meter (on)
-            MotionTestMeter(
-                title: "Shake",
-                iconName: "wave.3.right",
-                value: .constant(1.0),
-                color: .orange,
-                isActive: true,
-                isBinary: true
-            )
-            
-            // Binary meter (off)
-            MotionTestMeter(
-                title: "Shake (Off)",
-                iconName: "wave.3.right",
-                value: .constant(0.0),
-                color: .orange,
-                isActive: true,
-                isBinary: true
-            )
-            
-            // Inactive meter
-            MotionTestMeter(
-                title: "Inactive",
-                iconName: "stopwatch",
-                value: .constant(0.0),
-                color: .gray,
-                isActive: false
-            )
-        }
-        .padding()
-        .previewLayout(.sizeThatFits)
     }
 }
